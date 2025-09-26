@@ -46,9 +46,12 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 	ensureBinary(t, "kind")
 	ensureBinary(t, "kubectl")
 
-	clusterName := fmt.Sprintf("betterstack-e2e-%d", time.Now().UnixNano())
-	createKindCluster(t, clusterName)
-	defer deleteKindCluster(clusterName)
+	clusterName := os.Getenv("KIND_CLUSTER_NAME")
+	if clusterName == "" {
+		clusterName = fmt.Sprintf("betterstack-e2e-%d", time.Now().UnixNano())
+		createKindCluster(t, clusterName)
+		defer deleteKindCluster(clusterName)
+	}
 
 	rootDir := projectRoot()
 	loadDotEnvIfPresent(t, rootDir)

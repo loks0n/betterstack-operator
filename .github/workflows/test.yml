@@ -54,9 +54,11 @@ jobs:
         uses: helm/kind-action@v1.8.0
         with:
           version: v0.20.0
+          cluster_name: betterstack-e2e
 
       - name: Run e2e
         env:
+          KIND_CLUSTER_NAME: betterstack-e2e
           BETTERSTACK_TOKEN: ${{ secrets.BETTERSTACK_TOKEN }}
         run: |
           if [ -z "$BETTERSTACK_TOKEN" ]; then
