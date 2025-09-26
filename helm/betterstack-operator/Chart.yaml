@@ -1,0 +1,7 @@
+apiVersion: v2
+name: betterstack-operator
+description: Kubernetes operator for managing Better Stack monitors
+version: 0.1.0
+appVersion: main
+kubeVersion: ">=1.25.0-0"
+type: application

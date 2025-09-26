@@ -1,0 +1,18 @@
+# Build artifacts
+bin/
+dist/
+
+# Editor/IDE settings
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Local secrets
+.env
+
+# Go build cache artifacts
+*.test
+*.out

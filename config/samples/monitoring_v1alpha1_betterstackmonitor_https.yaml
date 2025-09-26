@@ -1,0 +1,39 @@
+apiVersion: monitoring.betterstack.io/v1alpha1
+kind: BetterStackMonitor
+metadata:
+  name: demo-https-monitor
+  namespace: default
+spec:
+  teamName: platform
+  url: https://example.com/healthz
+  name: Demo HTTPS Monitor
+  monitorType: status
+  checkFrequencyMinutes: 5
+  expectedStatusCodes:
+    - 200
+    - 204
+  requestMethod: HEAD
+  followRedirects: true
+  verifySSL: true
+  rememberCookies: false
+  email: true
+  sms: false
+  call: false
+  push: true
+  criticalAlert: true
+  teamWaitSeconds: 120
+  requestTimeoutSeconds: 15
+  recoveryPeriodSeconds: 180
+  confirmationPeriodSeconds: 60
+  maintenanceDays:
+    - sat
+    - sun
+  maintenanceFrom: "01:00:00"
+  maintenanceTo: "02:00:00"
+  maintenanceTimezone: UTC
+  requestHeaders:
+    - name: X-Monitor-Source
+      value: betterstack-operator
+  apiTokenSecretRef:
+    name: betterstack-credentials
+    key: api-key

@@ -1,0 +1,28 @@
+apiVersion: monitoring.betterstack.io/v1alpha1
+kind: BetterStackMonitor
+metadata:
+  name: demo-tcp-monitor
+  namespace: default
+spec:
+  teamName: sre
+  url: db.example.internal
+  monitorType: tcp
+  name: Internal Postgres TCP Monitor
+  checkFrequencyMinutes: 2
+  port: 5432
+  requestTimeoutSeconds: 5
+  confirmationPeriodSeconds: 30
+  recoveryPeriodSeconds: 180
+  sms: false
+  email: true
+  call: true
+  push: true
+  ipVersion: ipv4
+  maintenanceDays:
+    - sun
+  maintenanceFrom: "02:00:00"
+  maintenanceTo: "04:00:00"
+  maintenanceTimezone: America/New_York
+  apiTokenSecretRef:
+    name: betterstack-credentials
+    key: api-key

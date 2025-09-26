@@ -1,0 +1,39 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: betterstack-operator
+rules:
+  - apiGroups:
+      - monitoring.betterstack.io
+    resources:
+      - betterstackmonitors
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - monitoring.betterstack.io
+    resources:
+      - betterstackmonitors/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - monitoring.betterstack.io
+    resources:
+      - betterstackmonitors/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch

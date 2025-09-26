@@ -1,0 +1,31 @@
+apiVersion: monitoring.betterstack.io/v1alpha1
+kind: BetterStackMonitor
+metadata:
+  name: demo-keyword-monitor
+  namespace: default
+spec:
+  teamName: marketing
+  url: https://status.example.com
+  monitorType: keyword
+  name: Marketing Status Page Keyword Check
+  checkFrequencyMinutes: 10
+  requiredKeyword: "All systems operational"
+  requestMethod: GET
+  followRedirects: true
+  rememberCookies: true
+  email: true
+  sms: true
+  call: false
+  push: true
+  maintenanceDays:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+  maintenanceFrom: "00:30:00"
+  maintenanceTo: "01:00:00"
+  maintenanceTimezone: Europe/London
+  apiTokenSecretRef:
+    name: betterstack-credentials
+    key: api-key

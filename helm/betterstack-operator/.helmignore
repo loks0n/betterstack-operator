@@ -1,0 +1,14 @@
+# Common VCS dirs
+.git/
+.hg/
+.svn/
+
+# Editor files
+*.swp
+*.bak
+*.tmp
+.DS_Store
+
+# Build output
+bin/
+dist/

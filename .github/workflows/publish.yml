@@ -1,0 +1,90 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.13.3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Helm registry login
+        run: echo ${{ github.token }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
+
+      - name: Set image meta
+        id: meta
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/betterstack-operator
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Prepare dist directory
+        run: mkdir -p dist
+
+      - name: Prepare chart values
+        run: |
+          IMAGE=${{ steps.meta.outputs.image }}
+          VERSION=${{ steps.meta.outputs.version }}
+          sed -i "s|repository: ghcr.io/loks0n/betterstack-operator|repository: $IMAGE|" helm/betterstack-operator/values.yaml
+          sed -i "s|tag: main|tag: $VERSION|" helm/betterstack-operator/values.yaml
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }},${{ steps.meta.outputs.image }}:latest
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+
+      - name: Package Helm chart
+        run: |
+          VERSION=${{ steps.meta.outputs.version }}
+          helm package helm/betterstack-operator \
+            --app-version ${VERSION} \
+            --version ${VERSION} \
+            --destination dist
+
+      - name: Push Helm chart
+        run: |
+          VERSION=${{ steps.meta.outputs.version }}
+          helm push dist/betterstack-operator-${VERSION}.tgz oci://ghcr.io/${{ github.repository_owner }}/betterstack-operator/helm
+
+      - name: Restore chart values
+        run: git checkout -- helm/betterstack-operator/values.yaml
+
+      - name: Publish manifests
+        run: |
+          VERSION=${{ steps.meta.outputs.version }}
+          IMAGE=${{ steps.meta.outputs.image }}
+          sed "s|ghcr.io/loks0n/betterstack-operator:latest|$IMAGE:$VERSION|" config/manager/manager.yaml > dist/manager.yaml
+          cp config/crd/bases/monitoring.betterstack.io_betterstackmonitors.yaml dist/
+          tar czf dist/betterstack-operator-${VERSION}.tar.gz -C dist manager.yaml monitoring.betterstack.io_betterstackmonitors.yaml
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifests
+          path: dist/betterstack-operator-${{ steps.meta.outputs.version }}.tar.gz
