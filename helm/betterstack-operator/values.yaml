@@ -61,3 +61,5 @@ credentials:
     key: api-key
     value: ""
     annotations: {}
+    namespace: ""
+    additionalNamespaces: []

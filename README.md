@@ -29,7 +29,7 @@ Choose how the controller should access the API token:
     --wait
   ```
 
-  Swap `--set-file` for `--set credentials.secret.value=$TOKEN` if you prefer piping the token directly from an environment variable or secret store.
+  Swap `--set-file` for `--set credentials.secret.value=$TOKEN` if you prefer piping the token directly from an environment variable or secret store. Add tenant copies with `--set-json credentials.secret.additionalNamespaces='["edge","storefront"]'`.
 
 - **Bring-your-own secret** – pre-create it and point the chart at it:
 
@@ -46,7 +46,7 @@ Choose how the controller should access the API token:
     --wait
   ```
 
-The chart-generated secret defaults to `betterstack-operator-credentials`. Whichever path you choose, the secret must exist in every namespace where you define `BetterStackMonitor` objects.
+The chart-generated secret defaults to `betterstack-operator-credentials` in the release namespace. Use `credentials.secret.namespace` to move the primary secret and `credentials.secret.additionalNamespaces` to duplicate it; whichever path you choose, ensure the secret exists in every namespace where you create `BetterStackMonitor` objects.
 
 ### 2. Create monitors
 
@@ -67,12 +67,13 @@ kubectl describe betterstackmonitor demo-monitor
 
 Deleting a `BetterStackMonitor` automatically deletes the remote Better Stack monitor thanks to controller finalizers.
 
-### Configuration highlights
+### Configuration
 
 See `helm/betterstack-operator/values.yaml` for the full list. Frequently tuned values include:
 
 - `credentials.existingSecret` – reference a pre-created secret instead of letting the chart manage one.
 - `credentials.secret.*` – control chart-managed secret creation (name override, key, annotations, inline value).
+  Use `credentials.secret.namespace` to move the primary secret and `credentials.secret.additionalNamespaces` to fan it out to tenant namespaces.
 - `imagePullSecrets` – add registry credentials when pulling the operator image.
 - `podAnnotations`, `podLabels`, `podSecurityContext`, `containerSecurityContext` – attach metadata or adjust pod/container security posture.
 - `nodeSelector`, `tolerations`, `affinity` – steer the operator onto matching nodes.

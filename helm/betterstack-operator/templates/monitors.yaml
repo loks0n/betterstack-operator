@@ -1,0 +1,22 @@
+{{- if .Values.monitors }}
+{{- range $index, $monitor := .Values.monitors }}
+{{- $name := required (printf "monitors[%d].name is required" $index) $monitor.name }}
+{{- $spec := required (printf "monitors[%d].spec is required" $index) $monitor.spec }}
+---
+apiVersion: monitoring.betterstack.io/v1alpha1
+kind: BetterStackMonitor
+metadata:
+  name: {{ $name }}
+  namespace: {{ default $.Release.Namespace $monitor.namespace }}
+{{- with $monitor.labels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with $monitor.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{ toYaml $spec | indent 2 }}
+{{- end }}
+{{- end }}
