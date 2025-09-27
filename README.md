@@ -11,7 +11,7 @@ The Better Stack Operator keeps Better Stack monitors in sync with Kubernetes by
 
 ## Install with Helm
 
-Published charts live at `oci://ghcr.io/loks0n/betterstack-operator/helm/betterstack-operator`.
+Published charts live at `oci://ghcr.io/loks0n/betterstack-operator/helm/betterstack-operator` (latest release `0.0.2`).
 
 ### 1. Provide Better Stack credentials
 
@@ -22,6 +22,7 @@ Choose how the controller should access the API token:
   ```bash
   helm upgrade --install betterstack-operator \
     oci://ghcr.io/loks0n/betterstack-operator/helm/betterstack-operator \
+    --version 0.0.2 \
     --namespace betterstack-operator --create-namespace \
     --set credentials.secret.create=true \
     --set-file credentials.secret.value=./betterstack-token.txt \
@@ -39,6 +40,7 @@ Choose how the controller should access the API token:
 
   helm upgrade --install betterstack-operator \
     oci://ghcr.io/loks0n/betterstack-operator/helm/betterstack-operator \
+    --version 0.0.2 \
     --namespace betterstack-operator --create-namespace \
     --set credentials.existingSecret=betterstack-operator-credentials \
     --wait

@@ -71,16 +71,6 @@ jobs:
           CHART_VERSION=${{ steps.meta.outputs.chart_version }}
           helm push dist/betterstack-operator-${CHART_VERSION}.tgz oci://ghcr.io/${{ github.repository_owner }}/betterstack-operator/helm
 
-      - name: Push Helm chart latest tag
-        run: |
-          CHART_VERSION=${{ steps.meta.outputs.chart_version }}
-          TMP_DIR=$(mktemp -d)
-          tar -xzf dist/betterstack-operator-${CHART_VERSION}.tgz -C "$TMP_DIR"
-          helm chart save "$TMP_DIR/betterstack-operator" ghcr.io/${{ github.repository_owner }}/betterstack-operator/helm/betterstack-operator:latest
-          helm chart push ghcr.io/${{ github.repository_owner }}/betterstack-operator/helm/betterstack-operator:latest
-          helm chart remove ghcr.io/${{ github.repository_owner }}/betterstack-operator/helm/betterstack-operator:latest
-          rm -rf "$TMP_DIR"
-
       - name: Set up kustomize
         uses: imranismail/setup-kustomize@v1
         with:
@@ -90,17 +80,7 @@ jobs:
         env:
           VERSION: ${{ steps.meta.outputs.version }}
           IMAGE: ${{ steps.meta.outputs.image }}
-        run: |
-          set -euo pipefail
-          TMP_DIR=$(mktemp -d)
-          cp -r config/manager "$TMP_DIR/manager"
-          pushd "$TMP_DIR/manager" >/dev/null
-          kustomize edit set image ghcr.io/loks0n/betterstack-operator=$IMAGE:$VERSION
-          kustomize build . > "$GITHUB_WORKSPACE/dist/manager.yaml"
-          popd >/dev/null
-          rm -rf "$TMP_DIR"
-          cp config/crd/bases/monitoring.betterstack.io_betterstackmonitors.yaml dist/
-          tar czf dist/betterstack-operator-${VERSION}.tar.gz -C dist manager.yaml monitoring.betterstack.io_betterstackmonitors.yaml
+        run: scripts/build-manifests.sh
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
