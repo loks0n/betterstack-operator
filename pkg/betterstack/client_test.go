@@ -30,7 +30,7 @@ func TestListMonitors(t *testing.T) {
 
 	client := NewClient(server.URL, "token", server.Client())
 
-	list, err := client.ListMonitors(context.Background(), ListMonitorsOptions{
+	list, err := client.Monitors.List(context.Background(), ListMonitorsOptions{
 		URL:               "https://example.com",
 		PronounceableName: "Example",
 		Page:              2,
@@ -63,7 +63,7 @@ func TestGetMonitor(t *testing.T) {
 
 	client := NewClient(server.URL, "token", server.Client())
 
-	monitor, err := client.GetMonitor(context.Background(), "abc/123")
+	monitor, err := client.Monitors.Get(context.Background(), "abc/123")
 	if err != nil {
 		t.Fatalf("GetMonitor error: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestGetMonitorNotFound(t *testing.T) {
 
 	client := NewClient(server.URL, "token", server.Client())
 
-	_, err := client.GetMonitor(context.Background(), "missing")
+	_, err := client.Monitors.Get(context.Background(), "missing")
 	if err == nil {
 		t.Fatalf("expected error")
 	}

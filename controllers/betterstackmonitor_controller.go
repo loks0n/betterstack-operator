@@ -79,10 +79,11 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	attr := buildMonitorAttributes(monitor.Spec)
 	client := betterstack.NewClient(monitor.Spec.BaseURL, token, r.HTTPClient)
+	monitorAPI := client.Monitors
 
 	var apiMonitor betterstack.Monitor
 	if monitor.Status.MonitorID != "" {
-		apiMonitor, err = client.UpdateMonitor(ctx, monitor.Status.MonitorID, attr)
+		apiMonitor, err = monitorAPI.Update(ctx, monitor.Status.MonitorID, attr)
 		if betterstack.IsNotFound(err) {
 			logger.Info("remote monitor missing, creating anew", "id", monitor.Status.MonitorID)
 			monitor.Status.MonitorID = ""
@@ -91,7 +92,7 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if err == nil && monitor.Status.MonitorID == "" {
-		apiMonitor, err = client.CreateMonitor(ctx, attr)
+		apiMonitor, err = monitorAPI.Create(ctx, attr)
 	}
 
 	if err != nil {
@@ -132,7 +133,7 @@ func (r *BetterStackMonitorReconciler) handleDelete(ctx context.Context, monitor
 			logger.Info("skipping remote monitor deletion due to missing credentials", "monitorID", monitor.Status.MonitorID, "error", err)
 		} else {
 			client := betterstack.NewClient(monitor.Spec.BaseURL, token, r.HTTPClient)
-			if err := client.DeleteMonitor(ctx, monitor.Status.MonitorID); err != nil && !betterstack.IsNotFound(err) {
+			if err := client.Monitors.Delete(ctx, monitor.Status.MonitorID); err != nil && !betterstack.IsNotFound(err) {
 				logger.Error(err, "unable to delete Better Stack monitor", "monitorID", monitor.Status.MonitorID)
 			}
 		}

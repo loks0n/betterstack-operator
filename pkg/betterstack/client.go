@@ -21,6 +21,13 @@ type Client struct {
 	baseURL    string
 	token      string
 	httpClient *http.Client
+
+	Monitors *MonitorService
+}
+
+// MonitorService provides monitor-specific Better Stack operations.
+type MonitorService struct {
+	client *Client
 }
 
 // Monitor represents a Better Stack monitor.
@@ -73,24 +80,26 @@ func NewClient(baseURL, token string, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &Client{
+	client := &Client{
 		baseURL:    strings.TrimSuffix(baseURL, "/"),
 		token:      token,
 		httpClient: httpClient,
 	}
+	client.Monitors = &MonitorService{client: client}
+	return client
 }
 
-// CreateMonitor creates a monitor in Better Stack.
-func (c *Client) CreateMonitor(ctx context.Context, attrs map[string]any) (Monitor, error) {
+// Create creates a monitor in Better Stack.
+func (s *MonitorService) Create(ctx context.Context, attrs map[string]any) (Monitor, error) {
 	var respEnvelope monitorEnvelope
-	if err := c.do(ctx, http.MethodPost, "/monitors", attrs, &respEnvelope); err != nil {
+	if err := s.client.do(ctx, http.MethodPost, "/monitors", attrs, &respEnvelope); err != nil {
 		return Monitor{}, err
 	}
 	return Monitor{ID: respEnvelope.Data.ID, Attributes: respEnvelope.Data.Attributes}, nil
 }
 
-// ListMonitors retrieves monitors, optionally filtering and paginating results.
-func (c *Client) ListMonitors(ctx context.Context, opts ListMonitorsOptions) (MonitorList, error) {
+// List retrieves monitors, optionally filtering and paginating results.
+func (s *MonitorService) List(ctx context.Context, opts ListMonitorsOptions) (MonitorList, error) {
 	values := url.Values{}
 	if opts.URL != "" {
 		values.Set("url", opts.URL)
@@ -111,7 +120,7 @@ func (c *Client) ListMonitors(ctx context.Context, opts ListMonitorsOptions) (Mo
 	}
 
 	var resp monitorListEnvelope
-	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+	if err := s.client.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return MonitorList{}, err
 	}
 
@@ -126,19 +135,19 @@ func (c *Client) ListMonitors(ctx context.Context, opts ListMonitorsOptions) (Mo
 	}, nil
 }
 
-// GetMonitor retrieves a monitor by ID.
-func (c *Client) GetMonitor(ctx context.Context, id string) (Monitor, error) {
+// Get retrieves a monitor by ID.
+func (s *MonitorService) Get(ctx context.Context, id string) (Monitor, error) {
 	var respEnvelope monitorEnvelope
-	if err := c.do(ctx, http.MethodGet, fmt.Sprintf("/monitors/%s", url.PathEscape(id)), nil, &respEnvelope); err != nil {
+	if err := s.client.do(ctx, http.MethodGet, fmt.Sprintf("/monitors/%s", url.PathEscape(id)), nil, &respEnvelope); err != nil {
 		return Monitor{}, err
 	}
 	return Monitor{ID: respEnvelope.Data.ID, Attributes: respEnvelope.Data.Attributes}, nil
 }
 
-// UpdateMonitor updates an existing monitor in Better Stack.
-func (c *Client) UpdateMonitor(ctx context.Context, id string, attrs map[string]any) (Monitor, error) {
+// Update updates an existing monitor in Better Stack.
+func (s *MonitorService) Update(ctx context.Context, id string, attrs map[string]any) (Monitor, error) {
 	var respEnvelope monitorEnvelope
-	if err := c.do(ctx, http.MethodPut, fmt.Sprintf("/monitors/%s", url.PathEscape(id)), attrs, &respEnvelope); err != nil {
+	if err := s.client.do(ctx, http.MethodPut, fmt.Sprintf("/monitors/%s", url.PathEscape(id)), attrs, &respEnvelope); err != nil {
 		return Monitor{}, err
 	}
 	if respEnvelope.Data.ID == "" {
@@ -147,9 +156,9 @@ func (c *Client) UpdateMonitor(ctx context.Context, id string, attrs map[string]
 	return Monitor{ID: respEnvelope.Data.ID, Attributes: respEnvelope.Data.Attributes}, nil
 }
 
-// DeleteMonitor removes a monitor. Returns nil if the monitor is already absent.
-func (c *Client) DeleteMonitor(ctx context.Context, id string) error {
-	err := c.do(ctx, http.MethodDelete, fmt.Sprintf("/monitors/%s", url.PathEscape(id)), nil, nil)
+// Delete removes a monitor. Returns nil if the monitor is already absent.
+func (s *MonitorService) Delete(ctx context.Context, id string) error {
+	err := s.client.do(ctx, http.MethodDelete, fmt.Sprintf("/monitors/%s", url.PathEscape(id)), nil, nil)
 	if err != nil && IsNotFound(err) {
 		return nil
 	}
@@ -263,7 +272,7 @@ func parseAPIError(resp *http.Response) error {
 	return &APIError{StatusCode: resp.StatusCode, Message: message}
 }
 
-// ListMonitorsOptions controls filtering and pagination for ListMonitors.
+// ListMonitorsOptions controls filtering and pagination for MonitorService.List.
 type ListMonitorsOptions struct {
 	URL               string
 	PronounceableName string

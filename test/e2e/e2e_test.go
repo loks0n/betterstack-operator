@@ -176,7 +176,7 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		_ = apiClient.DeleteMonitor(ctx, monitorID)
+		_ = apiClient.Monitors.Delete(ctx, monitorID)
 	}()
 
 	ctx, cancelFetch := context.WithTimeout(context.Background(), 60*time.Second)
@@ -412,7 +412,7 @@ func waitForMonitorID(t *testing.T, k8sClient client.Client, namespace, name str
 
 func fetchRemoteMonitor(t *testing.T, ctx context.Context, client *betterstack.Client, id string) betterstack.Monitor {
 	t.Helper()
-	monitor, err := client.GetMonitor(ctx, id)
+	monitor, err := client.Monitors.Get(ctx, id)
 	if err != nil {
 		t.Fatalf("fetch remote monitor %s: %v", id, err)
 	}
@@ -420,7 +420,7 @@ func fetchRemoteMonitor(t *testing.T, ctx context.Context, client *betterstack.C
 }
 
 func monitorExists(ctx context.Context, client *betterstack.Client, id string) bool {
-	_, err := client.GetMonitor(ctx, id)
+	_, err := client.Monitors.Get(ctx, id)
 	if err == nil {
 		return true
 	}
