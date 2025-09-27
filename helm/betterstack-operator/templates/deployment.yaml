@@ -22,7 +22,7 @@ spec:
       serviceAccountName: {{ default (include "betterstack-operator.fullname" .) .Values.serviceAccount.name }}
       containers:
         - name: manager
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - "--leader-elect={{ .Values.manager.leaderElection }}"

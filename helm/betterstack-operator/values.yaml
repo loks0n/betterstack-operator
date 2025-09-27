@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/loks0n/betterstack-operator
-  tag: main
+  tag: ""
   pullPolicy: IfNotPresent
 
 nameOverride: ""
