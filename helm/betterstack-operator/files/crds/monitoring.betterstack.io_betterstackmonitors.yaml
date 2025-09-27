@@ -152,6 +152,9 @@ spec:
                   type: string
                 apiTokenSecretRef:
                   type: object
+                  default:
+                    name: betterstack-operator-credentials
+                    key: api-key
                   required:
                     - name
                     - key
