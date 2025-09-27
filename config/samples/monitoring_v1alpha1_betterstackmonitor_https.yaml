@@ -35,5 +35,5 @@ spec:
     - name: X-Monitor-Source
       value: betterstack-operator
   apiTokenSecretRef:
-    name: betterstack-credentials
+    name: betterstack-operator-credentials
     key: api-key

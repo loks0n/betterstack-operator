@@ -18,7 +18,20 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "betterstack-operator.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
       serviceAccountName: {{ default (include "betterstack-operator.fullname" .) .Values.serviceAccount.name }}
       containers:
         - name: manager
@@ -26,6 +39,8 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - "--leader-elect={{ .Values.manager.leaderElection }}"
+            - "--metrics-bind-address=:{{ .Values.manager.metricsPort }}"
+            - "--health-probe-bind-address=:{{ .Values.manager.healthProbePort }}"
             {{- range $arg := .Values.manager.extraArgs }}
             - {{ $arg | quote }}
             {{- end }}
@@ -42,9 +57,21 @@ spec:
             httpGet:
               path: /healthz
               port: healthz
+          {{- with .Values.containerSecurityContext }}
           securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: 65532
+{{ toYaml . | nindent 12 }}
+          {{- end }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | nindent 8 }}
+      {{- end }}

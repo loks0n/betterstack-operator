@@ -3,6 +3,8 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
+imagePullSecrets: []
+
 nameOverride: ""
 fullnameOverride: ""
 
@@ -10,9 +12,13 @@ namespace: ""
 
 replicaCount: 1
 
+podAnnotations: {}
+podLabels: {}
+
 serviceAccount:
   create: true
   name: ""
+  annotations: {}
 
 resources:
   requests:
@@ -22,9 +28,22 @@ resources:
     cpu: 300m
     memory: 256Mi
 
+podSecurityContext: {}
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 65532
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
 manager:
   leaderElection: true
-  metricsPort: 8443
+  metricsPort: 8080
   healthProbePort: 8081
   extraArgs: []
 
@@ -33,3 +52,12 @@ rbac:
 
 crds:
   install: true
+
+credentials:
+  existingSecret: ""
+  secret:
+    create: false
+    name: ""
+    key: api-key
+    value: ""
+    annotations: {}
