@@ -167,7 +167,6 @@ spec:
                   type: string
                 observedGeneration:
                   type: integer
-                  format: int64
                 conditions:
                   type: array
                   items:
