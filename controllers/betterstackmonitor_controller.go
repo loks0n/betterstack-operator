@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,13 +78,23 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		status.SetCondition(newCondition(monitoringv1alpha1.ConditionCredentials, metav1.ConditionTrue, "TokenResolved", fmt.Sprintf("Using secret %s/%s", monitor.Namespace, monitor.Spec.APITokenSecretRef.Name), &now))
 	})
 
-	attr := buildMonitorAttributes(monitor.Spec)
 	client := betterstack.NewClient(monitor.Spec.BaseURL, token, r.HTTPClient)
 	monitorAPI := client.Monitors
 
+	var existingMonitor *betterstack.Monitor
+	if monitor.Status.MonitorID != "" {
+		existing, getErr := monitorAPI.Get(ctx, monitor.Status.MonitorID)
+		if getErr != nil && !betterstack.IsNotFound(getErr) {
+			logger.Error(getErr, "unable to fetch existing Better Stack monitor", "id", monitor.Status.MonitorID)
+		} else if getErr == nil {
+			existingMonitor = &existing
+		}
+	}
+	request := buildMonitorRequest(monitor.Spec, existingMonitor)
+
 	var apiMonitor betterstack.Monitor
 	if monitor.Status.MonitorID != "" {
-		apiMonitor, err = monitorAPI.Update(ctx, monitor.Status.MonitorID, attr)
+		apiMonitor, err = monitorAPI.Update(ctx, monitor.Status.MonitorID, request)
 		if betterstack.IsNotFound(err) {
 			logger.Info("remote monitor missing, creating anew", "id", monitor.Status.MonitorID)
 			monitor.Status.MonitorID = ""
@@ -92,7 +103,7 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if err == nil && monitor.Status.MonitorID == "" {
-		apiMonitor, err = monitorAPI.Create(ctx, attr)
+		apiMonitor, err = monitorAPI.Create(ctx, request)
 	}
 
 	if err != nil {
@@ -175,139 +186,187 @@ func (r *BetterStackMonitorReconciler) patchStatus(ctx context.Context, monitor 
 	return r.Status().Patch(ctx, monitor, client.MergeFrom(base))
 }
 
-func buildMonitorAttributes(spec monitoringv1alpha1.BetterStackMonitorSpec) map[string]any {
-	attrs := map[string]any{
-		"url": spec.URL,
-	}
+func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existing *betterstack.Monitor) betterstack.MonitorCreateRequest {
+	req := betterstack.MonitorCreateRequest{}
 
+	if spec.URL != "" {
+		req.URL = stringPtr(spec.URL)
+	}
 	if spec.Name != "" {
-		attrs["pronounceable_name"] = spec.Name
+		req.PronounceableName = stringPtr(spec.Name)
 	}
 	if spec.MonitorType != "" {
-		attrs["monitor_type"] = spec.MonitorType
+		req.MonitorType = stringPtr(spec.MonitorType)
 	}
 	if spec.TeamName != "" {
-		attrs["team_name"] = spec.TeamName
+		req.TeamName = stringPtr(spec.TeamName)
 	}
 	if spec.CheckFrequencyMinutes > 0 {
-		attrs["check_frequency"] = spec.CheckFrequencyMinutes * 60
+		frequency := spec.CheckFrequencyMinutes * 60
+		req.CheckFrequency = intPtr(frequency)
 	}
 	if len(spec.Regions) > 0 {
-		attrs["regions"] = spec.Regions
+		req.Regions = append([]string(nil), spec.Regions...)
 	}
 	if spec.RequestMethod != "" {
-		attrs["http_method"] = strings.ToLower(spec.RequestMethod)
+		method := strings.ToLower(spec.RequestMethod)
+		req.HTTPMethod = stringPtr(method)
 	}
 	if len(spec.ExpectedStatusCodes) > 0 {
-		attrs["expected_status_codes"] = spec.ExpectedStatusCodes
+		req.ExpectedStatusCodes = append([]int(nil), spec.ExpectedStatusCodes...)
 	} else if spec.ExpectedStatusCode > 0 {
-		attrs["expected_status_codes"] = []int{spec.ExpectedStatusCode}
+		req.ExpectedStatusCodes = []int{spec.ExpectedStatusCode}
 	}
 	if spec.RequiredKeyword != "" {
-		attrs["required_keyword"] = spec.RequiredKeyword
+		req.RequiredKeyword = stringPtr(spec.RequiredKeyword)
 	}
-	attrs["paused"] = spec.Paused
+	req.Paused = boolPtrValue(spec.Paused)
 
 	if spec.Email != nil {
-		attrs["email"] = *spec.Email
+		req.Email = spec.Email
 	}
 	if spec.SMS != nil {
-		attrs["sms"] = *spec.SMS
+		req.SMS = spec.SMS
 	}
 	if spec.Call != nil {
-		attrs["call"] = *spec.Call
+		req.Call = spec.Call
 	}
 	if spec.Push != nil {
-		attrs["push"] = *spec.Push
+		req.Push = spec.Push
 	}
 	if spec.CriticalAlert != nil {
-		attrs["critical_alert"] = *spec.CriticalAlert
+		req.CriticalAlert = spec.CriticalAlert
 	}
 	if spec.FollowRedirects != nil {
-		attrs["follow_redirects"] = *spec.FollowRedirects
+		req.FollowRedirects = spec.FollowRedirects
 	}
 	if spec.VerifySSL != nil {
-		attrs["verify_ssl"] = *spec.VerifySSL
+		req.VerifySSL = spec.VerifySSL
 	}
 	if spec.RememberCookies != nil {
-		attrs["remember_cookies"] = *spec.RememberCookies
+		req.RememberCookies = spec.RememberCookies
 	}
 
 	if spec.PolicyID != "" {
-		attrs["policy_id"] = spec.PolicyID
+		req.PolicyID = stringPtr(spec.PolicyID)
 	}
 	if spec.ExpirationPolicyID != "" {
-		attrs["expiration_policy_id"] = spec.ExpirationPolicyID
+		req.ExpirationPolicyID = stringPtr(spec.ExpirationPolicyID)
 	}
 	if spec.MonitorGroupID != "" {
-		attrs["monitor_group_id"] = spec.MonitorGroupID
+		req.MonitorGroupID = stringPtr(spec.MonitorGroupID)
 	}
 	if spec.TeamWaitSeconds > 0 {
-		attrs["team_wait"] = spec.TeamWaitSeconds
+		req.TeamWait = intPtr(spec.TeamWaitSeconds)
 	}
 	if spec.DomainExpirationDays > 0 {
-		attrs["domain_expiration"] = spec.DomainExpirationDays
+		req.DomainExpiration = intPtr(spec.DomainExpirationDays)
 	}
 	if spec.SSLExpirationDays > 0 {
-		attrs["ssl_expiration"] = spec.SSLExpirationDays
+		req.SSLExpiration = intPtr(spec.SSLExpirationDays)
 	}
 	if spec.Port > 0 {
-		attrs["port"] = spec.Port
+		// Better Stack expects ports as strings (e.g. "25,465"); convert from the
+		// integer we expose on the CRD for friendlier YAML.
+		port := strconv.Itoa(spec.Port)
+		req.Port = stringPtr(port)
 	}
 	if spec.RequestTimeoutSeconds > 0 {
-		attrs["request_timeout"] = spec.RequestTimeoutSeconds
+		timeout := spec.RequestTimeoutSeconds
+		switch strings.ToLower(spec.MonitorType) {
+		case "ping", "tcp", "udp", "smtp", "pop", "imap", "dns":
+			timeout = timeout * 1000
+		}
+		req.RequestTimeout = intPtr(timeout)
 	}
 	if spec.RecoveryPeriodSeconds > 0 {
-		attrs["recovery_period"] = spec.RecoveryPeriodSeconds
+		req.RecoveryPeriod = intPtr(spec.RecoveryPeriodSeconds)
 	}
 	if spec.ConfirmationPeriodSeconds > 0 {
-		attrs["confirmation_period"] = spec.ConfirmationPeriodSeconds
+		req.ConfirmationPeriod = intPtr(spec.ConfirmationPeriodSeconds)
 	}
 	if spec.IPVersion != "" {
-		attrs["ip_version"] = spec.IPVersion
+		req.IPVersion = stringPtr(spec.IPVersion)
 	}
 	if len(spec.MaintenanceDays) > 0 {
-		attrs["maintenance_days"] = spec.MaintenanceDays
+		req.MaintenanceDays = append([]string(nil), spec.MaintenanceDays...)
 	}
 	if spec.MaintenanceFrom != "" {
-		attrs["maintenance_from"] = spec.MaintenanceFrom
+		req.MaintenanceFrom = stringPtr(spec.MaintenanceFrom)
 	}
 	if spec.MaintenanceTo != "" {
-		attrs["maintenance_to"] = spec.MaintenanceTo
+		req.MaintenanceTo = stringPtr(spec.MaintenanceTo)
 	}
 	if spec.MaintenanceTimezone != "" {
-		attrs["maintenance_timezone"] = spec.MaintenanceTimezone
+		req.MaintenanceTimezone = stringPtr(spec.MaintenanceTimezone)
 	}
 	if len(spec.RequestHeaders) > 0 {
-		headers := make([]map[string]string, 0, len(spec.RequestHeaders))
-		for _, h := range spec.RequestHeaders {
-			headers = append(headers, map[string]string{"name": h.Name, "value": h.Value})
+		existingHeaders := map[string][]betterstack.MonitorHeader{}
+		if existing != nil {
+			for _, hdr := range existing.Attributes.RequestHeaders {
+				key := strings.ToLower(hdr.Name)
+				existingHeaders[key] = append(existingHeaders[key], hdr)
+			}
 		}
-		attrs["request_headers"] = headers
+
+		req.RequestHeaders = make([]betterstack.MonitorRequestHeader, 0, len(spec.RequestHeaders))
+		for _, h := range spec.RequestHeaders {
+			header := betterstack.MonitorRequestHeader{Name: h.Name, Value: h.Value}
+			key := strings.ToLower(h.Name)
+			if list := existingHeaders[key]; len(list) > 0 {
+				hdr := list[0]
+				if len(list) > 1 {
+					existingHeaders[key] = list[1:]
+				} else {
+					delete(existingHeaders, key)
+				}
+				id := hdr.ID
+				header.ID = &id
+			}
+			req.RequestHeaders = append(req.RequestHeaders, header)
+		}
 	}
 	if spec.RequestBody != "" {
-		attrs["request_body"] = spec.RequestBody
+		req.RequestBody = stringPtr(spec.RequestBody)
 	}
 	if spec.AuthUsername != "" {
-		attrs["auth_username"] = spec.AuthUsername
+		req.AuthUsername = stringPtr(spec.AuthUsername)
 	}
 	if spec.AuthPassword != "" {
-		attrs["auth_password"] = spec.AuthPassword
+		req.AuthPassword = stringPtr(spec.AuthPassword)
 	}
 	if len(spec.EnvironmentVariables) > 0 {
-		attrs["environment_variables"] = spec.EnvironmentVariables
+		req.EnvironmentVariables = make(map[string]string, len(spec.EnvironmentVariables))
+		for k, v := range spec.EnvironmentVariables {
+			req.EnvironmentVariables[k] = v
+		}
 	}
 	if spec.PlaywrightScript != "" {
-		attrs["playwright_script"] = spec.PlaywrightScript
+		req.PlaywrightScript = stringPtr(spec.PlaywrightScript)
 	}
 	if spec.ScenarioName != "" {
-		attrs["scenario_name"] = spec.ScenarioName
+		req.ScenarioName = stringPtr(spec.ScenarioName)
+	}
+	if len(spec.AdditionalAttributes) > 0 {
+		req.AdditionalAttributes = make(map[string]any, len(spec.AdditionalAttributes))
+		for k, v := range spec.AdditionalAttributes {
+			req.AdditionalAttributes[k] = v
+		}
 	}
 
-	for k, v := range spec.AdditionalAttributes {
-		attrs[k] = v
-	}
-	return attrs
+	return req
+}
+
+func stringPtr(v string) *string {
+	return &v
+}
+
+func intPtr(v int) *int {
+	return &v
+}
+
+func boolPtrValue(v bool) *bool {
+	return &v
 }
 
 func newCondition(conditionType string, status metav1.ConditionStatus, reason, message string, transitionTime *metav1.Time) metav1.Condition {

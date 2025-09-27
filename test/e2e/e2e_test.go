@@ -183,31 +183,32 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 	defer cancelFetch()
 
 	remoteMonitor := fetchRemoteMonitor(t, ctx, apiClient, monitorID)
-	expectAttrString(t, remoteMonitor.Attributes, "url", monitorURL)
-	expectAttrString(t, remoteMonitor.Attributes, "monitor_type", "status")
-	expectAttrString(t, remoteMonitor.Attributes, "http_method", "head")
-	expectAttrInt(t, remoteMonitor.Attributes, "check_frequency", 180)
-	expectAttrIntSlice(t, remoteMonitor.Attributes, "expected_status_codes", []int{200})
-	expectAttrBool(t, remoteMonitor.Attributes, "follow_redirects", false)
-	expectAttrBool(t, remoteMonitor.Attributes, "remember_cookies", false)
-	expectAttrBool(t, remoteMonitor.Attributes, "verify_ssl", true)
-	expectAttrBool(t, remoteMonitor.Attributes, "email", false)
-	expectAttrBool(t, remoteMonitor.Attributes, "sms", true)
-	expectAttrBool(t, remoteMonitor.Attributes, "call", false)
-	expectAttrBool(t, remoteMonitor.Attributes, "push", true)
-	expectAttrBool(t, remoteMonitor.Attributes, "critical_alert", true)
-	expectAttrInt(t, remoteMonitor.Attributes, "team_wait", 120)
-	expectAttrInt(t, remoteMonitor.Attributes, "domain_expiration", 14)
-	expectAttrInt(t, remoteMonitor.Attributes, "ssl_expiration", 30)
-	expectAttrInt(t, remoteMonitor.Attributes, "request_timeout", 10)
-	expectAttrInt(t, remoteMonitor.Attributes, "recovery_period", 180)
-	expectAttrInt(t, remoteMonitor.Attributes, "confirmation_period", 90)
-	expectAttrString(t, remoteMonitor.Attributes, "ip_version", "ipv4")
-	expectAttrStringSlice(t, remoteMonitor.Attributes, "maintenance_days", []string{"mon", "tue"})
-	expectAttrString(t, remoteMonitor.Attributes, "maintenance_from", "01:00:00")
-	expectAttrString(t, remoteMonitor.Attributes, "maintenance_to", "02:00:00")
-	expectAttrString(t, remoteMonitor.Attributes, "maintenance_timezone", "UTC")
-	expectRequestHeader(t, remoteMonitor.Attributes, "X-E2E", "initial")
+	attrs := remoteMonitor.Attributes
+	expectString(t, "url", attrs.URL, monitorURL)
+	expectString(t, "monitor_type", attrs.MonitorType, "status")
+	expectString(t, "http_method", attrs.HTTPMethod, "head")
+	expectInt(t, "check_frequency", attrs.CheckFrequency, 180)
+	expectIntSlice(t, "expected_status_codes", attrs.ExpectedStatusCodes, []int{200})
+	expectBool(t, "follow_redirects", attrs.FollowRedirects, false)
+	expectBool(t, "remember_cookies", attrs.RememberCookies, false)
+	expectBool(t, "verify_ssl", attrs.VerifySSL, true)
+	expectBool(t, "email", attrs.Email, false)
+	expectBool(t, "sms", attrs.SMS, true)
+	expectBool(t, "call", attrs.Call, false)
+	expectBool(t, "push", attrs.Push, true)
+	expectBool(t, "critical_alert", attrs.CriticalAlert, true)
+	expectIntPtr(t, "team_wait", attrs.TeamWait, 120)
+	expectIntPtr(t, "domain_expiration", attrs.DomainExpiration, 14)
+	expectIntPtr(t, "ssl_expiration", attrs.SSLExpiration, 30)
+	expectInt(t, "request_timeout", attrs.RequestTimeout, 10)
+	expectInt(t, "recovery_period", attrs.RecoveryPeriod, 180)
+	expectInt(t, "confirmation_period", attrs.ConfirmationPeriod, 90)
+	expectStringPtr(t, "ip_version", attrs.IPVersion, "ipv4")
+	expectStringSlice(t, "maintenance_days", attrs.MaintenanceDays, []string{"mon", "tue"})
+	expectString(t, "maintenance_from", attrs.MaintenanceFrom, "01:00:00")
+	expectString(t, "maintenance_to", attrs.MaintenanceTo, "02:00:00")
+	expectString(t, "maintenance_timezone", attrs.MaintenanceTimezone, "UTC")
+	expectRequestHeader(t, attrs.RequestHeaders, "X-E2E", "initial")
 
 	// Update monitor name and pause flag.
 	if err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(monitor), monitor); err != nil {
@@ -251,30 +252,31 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 	ctxUpdate, cancelUpdate := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancelUpdate()
 	updatedMonitor := fetchRemoteMonitor(t, ctxUpdate, apiClient, monitorID)
-	expectAttrString(t, updatedMonitor.Attributes, "pronounceable_name", "Updated E2E")
-	expectAttrBool(t, updatedMonitor.Attributes, "paused", true)
-	expectAttrString(t, updatedMonitor.Attributes, "http_method", "get")
-	expectAttrInt(t, updatedMonitor.Attributes, "check_frequency", 300)
-	expectAttrIntSlice(t, updatedMonitor.Attributes, "expected_status_codes", []int{204, 205})
-	expectAttrBool(t, updatedMonitor.Attributes, "follow_redirects", true)
-	expectAttrBool(t, updatedMonitor.Attributes, "remember_cookies", true)
-	expectAttrBool(t, updatedMonitor.Attributes, "verify_ssl", false)
-	expectAttrBool(t, updatedMonitor.Attributes, "email", true)
-	expectAttrBool(t, updatedMonitor.Attributes, "sms", false)
-	expectAttrBool(t, updatedMonitor.Attributes, "push", false)
-	expectAttrBool(t, updatedMonitor.Attributes, "critical_alert", false)
-	expectAttrInt(t, updatedMonitor.Attributes, "team_wait", 60)
-	expectAttrInt(t, updatedMonitor.Attributes, "domain_expiration", 7)
-	expectAttrInt(t, updatedMonitor.Attributes, "ssl_expiration", 14)
-	expectAttrInt(t, updatedMonitor.Attributes, "request_timeout", 45)
-	expectAttrInt(t, updatedMonitor.Attributes, "recovery_period", 300)
-	expectAttrInt(t, updatedMonitor.Attributes, "confirmation_period", 120)
-	expectAttrString(t, updatedMonitor.Attributes, "ip_version", "ipv6")
-	expectAttrStringSlice(t, updatedMonitor.Attributes, "maintenance_days", []string{"wed"})
-	expectAttrString(t, updatedMonitor.Attributes, "maintenance_from", "02:00:00")
-	expectAttrString(t, updatedMonitor.Attributes, "maintenance_to", "03:00:00")
-	expectAttrString(t, updatedMonitor.Attributes, "maintenance_timezone", "Eastern Time (US & Canada)")
-	expectRequestHeader(t, updatedMonitor.Attributes, "X-E2E", "updated")
+	updated := updatedMonitor.Attributes
+	expectString(t, "pronounceable_name", updated.PronounceableName, "Updated E2E")
+	expectBool(t, "paused", updated.Paused, true)
+	expectString(t, "http_method", updated.HTTPMethod, "get")
+	expectInt(t, "check_frequency", updated.CheckFrequency, 300)
+	expectIntSlice(t, "expected_status_codes", updated.ExpectedStatusCodes, []int{204, 205})
+	expectBool(t, "follow_redirects", updated.FollowRedirects, true)
+	expectBool(t, "remember_cookies", updated.RememberCookies, true)
+	expectBool(t, "verify_ssl", updated.VerifySSL, false)
+	expectBool(t, "email", updated.Email, true)
+	expectBool(t, "sms", updated.SMS, false)
+	expectBool(t, "push", updated.Push, false)
+	expectBool(t, "critical_alert", updated.CriticalAlert, false)
+	expectIntPtr(t, "team_wait", updated.TeamWait, 60)
+	expectIntPtr(t, "domain_expiration", updated.DomainExpiration, 7)
+	expectIntPtr(t, "ssl_expiration", updated.SSLExpiration, 14)
+	expectInt(t, "request_timeout", updated.RequestTimeout, 45)
+	expectInt(t, "recovery_period", updated.RecoveryPeriod, 300)
+	expectInt(t, "confirmation_period", updated.ConfirmationPeriod, 120)
+	expectStringPtr(t, "ip_version", updated.IPVersion, "ipv6")
+	expectStringSlice(t, "maintenance_days", updated.MaintenanceDays, []string{"wed"})
+	expectString(t, "maintenance_from", updated.MaintenanceFrom, "02:00:00")
+	expectString(t, "maintenance_to", updated.MaintenanceTo, "03:00:00")
+	expectString(t, "maintenance_timezone", updated.MaintenanceTimezone, "Eastern Time (US & Canada)")
+	expectRequestHeader(t, updated.RequestHeaders, "X-E2E", "updated")
 
 	if err := k8sClient.Delete(context.Background(), monitor); err != nil {
 		t.Fatalf("delete monitor: %v", err)
@@ -497,128 +499,70 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
-func expectAttrString(t *testing.T, attrs map[string]any, key, expected string) {
+func expectString(t *testing.T, field, actual, expected string) {
 	t.Helper()
-	v, ok := attrs[key]
-	if !ok {
-		t.Fatalf("attribute %q missing", key)
-	}
-	if v == nil {
-		t.Fatalf("attribute %q is nil", key)
-	}
-	str, ok := v.(string)
-	if !ok {
-		t.Fatalf("attribute %q not string: %T", key, v)
-	}
-	if str != expected {
-		t.Fatalf("attribute %q mismatch: got %q want %q", key, str, expected)
+	if actual != expected {
+		t.Fatalf("%s mismatch: got %q want %q", field, actual, expected)
 	}
 }
 
-func expectAttrBool(t *testing.T, attrs map[string]any, key string, expected bool) {
+func expectBool(t *testing.T, field string, actual, expected bool) {
 	t.Helper()
-	v, ok := attrs[key]
-	if !ok {
-		t.Fatalf("attribute %q missing", key)
-	}
-	b, ok := v.(bool)
-	if !ok {
-		t.Fatalf("attribute %q not bool: %T", key, v)
-	}
-	if b != expected {
-		t.Fatalf("attribute %q mismatch: got %v want %v", key, b, expected)
+	if actual != expected {
+		t.Fatalf("%s mismatch: got %v want %v", field, actual, expected)
 	}
 }
 
-func expectAttrInt(t *testing.T, attrs map[string]any, key string, expected int) {
+func expectInt(t *testing.T, field string, actual, expected int) {
 	t.Helper()
-	v, ok := attrs[key]
-	if !ok {
-		t.Fatalf("attribute %q missing", key)
-	}
-	var got int
-	switch n := v.(type) {
-	case float64:
-		got = int(n)
-	case int:
-		got = n
-	case nil:
-		t.Fatalf("attribute %q is nil", key)
-	default:
-		t.Fatalf("attribute %q not numeric: %T", key, v)
-	}
-	if got != expected {
-		t.Fatalf("attribute %q mismatch: got %d want %d", key, got, expected)
+	if actual != expected {
+		t.Fatalf("%s mismatch: got %d want %d", field, actual, expected)
 	}
 }
 
-func expectAttrStringSlice(t *testing.T, attrs map[string]any, key string, expected []string) {
+func expectIntPtr(t *testing.T, field string, ptr *int, expected int) {
 	t.Helper()
-	v, ok := attrs[key]
-	if !ok {
-		t.Fatalf("attribute %q missing", key)
+	if ptr == nil {
+		t.Fatalf("%s is nil", field)
 	}
-	arr, ok := v.([]any)
-	if !ok {
-		t.Fatalf("attribute %q not array: %T", key, v)
-	}
-	got := make([]string, 0, len(arr))
-	for _, item := range arr {
-		s, ok := item.(string)
-		if !ok {
-			t.Fatalf("attribute %q contains non-string: %T", key, item)
-		}
-		got = append(got, s)
-	}
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("attribute %q mismatch: got %v want %v", key, got, expected)
+	if *ptr != expected {
+		t.Fatalf("%s mismatch: got %d want %d", field, *ptr, expected)
 	}
 }
 
-func expectAttrIntSlice(t *testing.T, attrs map[string]any, key string, expected []int) {
+func expectStringPtr(t *testing.T, field string, ptr *string, expected string) {
 	t.Helper()
-	v, ok := attrs[key]
-	if !ok {
-		t.Fatalf("attribute %q missing", key)
+	if ptr == nil {
+		t.Fatalf("%s is nil", field)
 	}
-	arr, ok := v.([]any)
-	if !ok {
-		t.Fatalf("attribute %q not array: %T", key, v)
-	}
-	got := make([]int, 0, len(arr))
-	for _, item := range arr {
-		switch n := item.(type) {
-		case float64:
-			got = append(got, int(n))
-		case int:
-			got = append(got, n)
-		default:
-			t.Fatalf("attribute %q contains non-number: %T", key, item)
-		}
-	}
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("attribute %q mismatch: got %v want %v", key, got, expected)
+	if *ptr != expected {
+		t.Fatalf("%s mismatch: got %q want %q", field, *ptr, expected)
 	}
 }
 
-func expectRequestHeader(t *testing.T, attrs map[string]any, name, value string) {
+func expectIntSlice(t *testing.T, field string, actual, expected []int) {
 	t.Helper()
-	v, ok := attrs["request_headers"]
-	if !ok {
-		t.Fatalf("attribute request_headers missing")
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("%s mismatch: got %v want %v", field, actual, expected)
 	}
-	arr, ok := v.([]any)
-	if !ok {
-		t.Fatalf("request_headers not array: %T", v)
+}
+
+func expectStringSlice(t *testing.T, field string, actual, expected []string) {
+	t.Helper()
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("%s mismatch: got %v want %v", field, actual, expected)
 	}
-	for _, item := range arr {
-		obj, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if obj["name"] == name && obj["value"] == value {
+}
+
+func expectRequestHeader(t *testing.T, headers []betterstack.MonitorHeader, name, value string) {
+	t.Helper()
+	for _, header := range headers {
+		if header.Name == name {
+			if header.Value != value {
+				t.Fatalf("header %q value mismatch: got %q want %q", name, header.Value, value)
+			}
 			return
 		}
 	}
-	t.Fatalf("request header %q=%q not found in %v", name, value, arr)
+	t.Fatalf("header %q not found", name)
 }

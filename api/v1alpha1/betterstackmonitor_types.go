@@ -67,7 +67,12 @@ type BetterStackMonitorSpec struct {
 	DomainExpirationDays int    `json:"domainExpirationDays,omitempty"`
 	SSLExpirationDays    int    `json:"sslExpirationDays,omitempty"`
 
-	Port                      int    `json:"port,omitempty"`
+	// Port is kept as an integer for CRD ergonomics and converted to the
+	// string form expected by the Better Stack API (e.g. "443" or "25,465").
+	Port int `json:"port,omitempty"`
+	// RequestTimeoutSeconds is expressed in seconds for all monitor types. When
+	// Better Stack expects millisecond values (ping, tcp, udp, smtp, pop, imap,
+	// dns) the controller converts this value automatically.
 	RequestTimeoutSeconds     int    `json:"requestTimeoutSeconds,omitempty"`
 	RecoveryPeriodSeconds     int    `json:"recoveryPeriodSeconds,omitempty"`
 	ConfirmationPeriodSeconds int    `json:"confirmationPeriodSeconds,omitempty"`

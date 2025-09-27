@@ -1,13 +1,15 @@
 package controllers
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
 	monitoringv1alpha1 "loks0n/betterstack-operator/api/v1alpha1"
+	"loks0n/betterstack-operator/pkg/betterstack"
 )
 
-func TestBuildMonitorAttributes(t *testing.T) {
+func TestBuildMonitorRequest(t *testing.T) {
 	spec := monitoringv1alpha1.BetterStackMonitorSpec{
 		URL:                       "https://example.com",
 		Name:                      "Example",
@@ -80,7 +82,7 @@ func TestBuildMonitorAttributes(t *testing.T) {
 		"team_wait":             spec.TeamWaitSeconds,
 		"domain_expiration":     spec.DomainExpirationDays,
 		"ssl_expiration":        spec.SSLExpirationDays,
-		"port":                  spec.Port,
+		"port":                  "443",
 		"request_timeout":       spec.RequestTimeoutSeconds,
 		"recovery_period":       spec.RecoveryPeriodSeconds,
 		"confirmation_period":   spec.ConfirmationPeriodSeconds,
@@ -98,10 +100,71 @@ func TestBuildMonitorAttributes(t *testing.T) {
 		"scenario_name":         spec.ScenarioName,
 		"custom":                "value",
 	}
+	wantedJSON, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal want: %v", err)
+	}
+	wanted := map[string]any{}
+	if err := json.Unmarshal(wantedJSON, &wanted); err != nil {
+		t.Fatalf("unmarshal want: %v", err)
+	}
 
-	got := buildMonitorAttributes(spec)
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected attributes map: diff=%v", diffMaps(got, want))
+	gotReq := buildMonitorRequest(spec, nil)
+	encoded, err := json.Marshal(gotReq)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	got := map[string]any{}
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	if diff := diffMaps(got, wanted); len(diff) > 0 {
+		t.Fatalf("unexpected attributes map: diff=%v", diff)
+	}
+}
+
+func TestBuildMonitorRequestConvertsTimeoutForServerMonitors(t *testing.T) {
+	spec := monitoringv1alpha1.BetterStackMonitorSpec{
+		URL:                   "tcp://example.com",
+		MonitorType:           "tcp",
+		RequestTimeoutSeconds: 3,
+	}
+
+	req := buildMonitorRequest(spec, nil)
+	if req.RequestTimeout == nil {
+		t.Fatalf("request timeout missing")
+	}
+	if got, want := *req.RequestTimeout, 3000; got != want {
+		t.Fatalf("timeout not converted, got %d want %d", got, want)
+	}
+}
+
+func TestBuildMonitorRequestAssignsHeaderIDsWhenPresent(t *testing.T) {
+	existingHeaderID := "hdr-123"
+	existing := &betterstack.Monitor{
+		Attributes: betterstack.MonitorAttributes{
+			RequestHeaders: []betterstack.MonitorHeader{{
+				ID:    existingHeaderID,
+				Name:  "X-Test",
+				Value: "old",
+			}},
+		},
+	}
+
+	spec := monitoringv1alpha1.BetterStackMonitorSpec{
+		URL: "https://example.com",
+		RequestHeaders: []monitoringv1alpha1.BetterStackHeader{{
+			Name:  "X-Test",
+			Value: "new",
+		}},
+	}
+
+	req := buildMonitorRequest(spec, existing)
+	if len(req.RequestHeaders) != 1 {
+		t.Fatalf("expected 1 header, got %d", len(req.RequestHeaders))
+	}
+	if req.RequestHeaders[0].ID == nil || *req.RequestHeaders[0].ID != existingHeaderID {
+		t.Fatalf("expected header id %s, got %v", existingHeaderID, req.RequestHeaders[0].ID)
 	}
 }
 
