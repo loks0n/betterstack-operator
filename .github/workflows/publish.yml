@@ -81,8 +81,10 @@ jobs:
           helm chart remove ghcr.io/${{ github.repository_owner }}/betterstack-operator/helm/betterstack-operator:latest
           rm -rf "$TMP_DIR"
 
-      - name: Install publish dependencies
-        run: python3 -m pip install --user pyyaml
+      - name: Set up kustomize
+        uses: imranismail/setup-kustomize@v1
+        with:
+          kustomize-version: '5.1.0'
 
       - name: Publish manifests
         env:
@@ -90,32 +92,13 @@ jobs:
           IMAGE: ${{ steps.meta.outputs.image }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-import os
-from pathlib import Path
-import yaml
-
-image = f"{os.environ['IMAGE']}:{os.environ['VERSION']}"
-src = Path("config/manager/manager.yaml")
-docs = list(yaml.safe_load_all(src.read_text()))
-
-for doc in docs:
-    if not isinstance(doc, dict):
-        continue
-    if doc.get("kind") != "Deployment":
-        continue
-    spec = doc.get("spec", {})
-    template = spec.get("template", {})
-    pod_spec = template.get("spec", {})
-    for container in pod_spec.get("containers", []):
-        if container.get("name") == "manager":
-            container["image"] = image
-
-dist = Path("dist")
-dist.mkdir(parents=True, exist_ok=True)
-with (dist / "manager.yaml").open("w") as fh:
-    yaml.safe_dump_all(docs, fh, sort_keys=False)
-PY
+          TMP_DIR=$(mktemp -d)
+          cp -r config/manager "$TMP_DIR/manager"
+          pushd "$TMP_DIR/manager" >/dev/null
+          kustomize edit set image ghcr.io/loks0n/betterstack-operator=$IMAGE:$VERSION
+          kustomize build . > "$GITHUB_WORKSPACE/dist/manager.yaml"
+          popd >/dev/null
+          rm -rf "$TMP_DIR"
           cp config/crd/bases/monitoring.betterstack.io_betterstackmonitors.yaml dist/
           tar czf dist/betterstack-operator-${VERSION}.tar.gz -C dist manager.yaml monitoring.betterstack.io_betterstackmonitors.yaml
 

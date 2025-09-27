@@ -52,7 +52,7 @@ Create the `betterstack-credentials` secret before running the chart (see Quick 
    kubectl apply -f config/rbac/service_account.yaml
    kubectl apply -f config/rbac/role.yaml
    kubectl apply -f config/rbac/role_binding.yaml
-   kubectl apply -f config/manager/manager.yaml
+   kubectl apply -k config/manager
    ```
 
 4. **Create a monitor resource**
