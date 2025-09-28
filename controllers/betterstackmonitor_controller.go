@@ -30,9 +30,13 @@ const (
 // BetterStackMonitorReconciler reconciles BetterStackMonitor resources.
 type BetterStackMonitorReconciler struct {
 	client.Client
-	Scheme     *runtime.Scheme
-	HTTPClient *http.Client
+	Scheme         *runtime.Scheme
+	HTTPClient     *http.Client
+	MonitorFactory MonitorFactory
 }
+
+// MonitorFactory builds monitor API instances for a given base URL and token.
+type MonitorFactory func(baseURL, token string, httpClient *http.Client) betterstack.MonitorClient
 
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors/status,verbs=get;update;patch
@@ -78,8 +82,7 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		status.SetCondition(newCondition(monitoringv1alpha1.ConditionCredentials, metav1.ConditionTrue, "TokenResolved", fmt.Sprintf("Using secret %s/%s", monitor.Namespace, monitor.Spec.APITokenSecretRef.Name), &now))
 	})
 
-	client := betterstack.NewClient(monitor.Spec.BaseURL, token, r.HTTPClient)
-	monitorAPI := client.Monitors
+	monitorAPI := r.monitorService(monitor.Spec.BaseURL, token)
 
 	var existingMonitor *betterstack.Monitor
 	if monitor.Status.MonitorID != "" {
@@ -143,8 +146,8 @@ func (r *BetterStackMonitorReconciler) handleDelete(ctx context.Context, monitor
 		if err != nil {
 			logger.Info("skipping remote monitor deletion due to missing credentials", "monitorID", monitor.Status.MonitorID, "error", err)
 		} else {
-			client := betterstack.NewClient(monitor.Spec.BaseURL, token, r.HTTPClient)
-			if err := client.Monitors.Delete(ctx, monitor.Status.MonitorID); err != nil && !betterstack.IsNotFound(err) {
+			service := r.monitorService(monitor.Spec.BaseURL, token)
+			if err := service.Delete(ctx, monitor.Status.MonitorID); err != nil && !betterstack.IsNotFound(err) {
 				logger.Error(err, "unable to delete Better Stack monitor", "monitorID", monitor.Status.MonitorID)
 			}
 		}
@@ -388,4 +391,12 @@ func (r *BetterStackMonitorReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&monitoringv1alpha1.BetterStackMonitor{}).
 		Complete(r)
+}
+
+func (r *BetterStackMonitorReconciler) monitorService(baseURL, token string) betterstack.MonitorClient {
+	if r.MonitorFactory != nil {
+		return r.MonitorFactory(baseURL, token, r.HTTPClient)
+	}
+	client := betterstack.NewClient(baseURL, token, r.HTTPClient)
+	return client.Monitors
 }
