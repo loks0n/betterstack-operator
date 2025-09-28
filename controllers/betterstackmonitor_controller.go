@@ -33,11 +33,26 @@ type BetterStackMonitorReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
 	HTTPClient     *http.Client
-	MonitorFactory MonitorFactory
+	Clients BetterStackClientFactory
 }
 
-// MonitorFactory builds monitor API instances for a given base URL and token.
-type MonitorFactory func(baseURL, token string, httpClient *http.Client) betterstack.MonitorClient
+// BetterStackClientFactory provides Better Stack API clients for reconcilers.
+type BetterStackClientFactory interface {
+	Monitor(baseURL, token string, httpClient *http.Client) betterstack.MonitorClient
+	Heartbeat(baseURL, token string, httpClient *http.Client) betterstack.HeartbeatClient
+}
+
+type defaultBetterStackClientFactory struct{}
+
+func (defaultBetterStackClientFactory) Monitor(baseURL, token string, httpClient *http.Client) betterstack.MonitorClient {
+	client := betterstack.NewClient(baseURL, token, httpClient)
+	return client.Monitors
+}
+
+func (defaultBetterStackClientFactory) Heartbeat(baseURL, token string, httpClient *http.Client) betterstack.HeartbeatClient {
+	client := betterstack.NewClient(baseURL, token, httpClient)
+	return client.Heartbeats
+}
 
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors/status,verbs=get;update;patch
@@ -393,9 +408,9 @@ func (r *BetterStackMonitorReconciler) SetupWithManager(mgr ctrl.Manager) error 
 }
 
 func (r *BetterStackMonitorReconciler) monitorService(baseURL, token string) betterstack.MonitorClient {
-	if r.MonitorFactory != nil {
-		return r.MonitorFactory(baseURL, token, r.HTTPClient)
+	factory := r.Clients
+	if factory == nil {
+		factory = defaultBetterStackClientFactory{}
 	}
-	client := betterstack.NewClient(baseURL, token, r.HTTPClient)
-	return client.Monitors
+	return factory.Monitor(baseURL, token, r.HTTPClient)
 }

@@ -182,12 +182,12 @@ func TestReconcileCreatesMonitorWhenRemoteMissing(t *testing.T) {
 			return betterstack.Monitor{ID: "new-id"}, nil
 		},
 	}
-	factory := &fakeMonitorFactory{service: service}
+	factory := &fakeBetterStackFactory{monitor: service}
 
 	r := &BetterStackMonitorReconciler{
-		Client:         client,
-		Scheme:         scheme,
-		MonitorFactory: factory.build,
+		Client:  client,
+		Scheme:  scheme,
+		Clients: factory,
 	}
 
 	ctx := context.Background()
@@ -266,13 +266,9 @@ func TestReconcileHandlesUpdateError(t *testing.T) {
 			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusInternalServerError, Message: "boom"}
 		},
 	}
-	factory := &fakeMonitorFactory{service: service}
+	factory := &fakeBetterStackFactory{monitor: service}
 
-	r := &BetterStackMonitorReconciler{
-		Client:         client,
-		Scheme:         scheme,
-		MonitorFactory: factory.build,
-	}
+	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme, Clients: factory}
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
@@ -338,13 +334,9 @@ func TestReconcileHandlesCreateError(t *testing.T) {
 			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusInternalServerError, Message: "boom"}
 		},
 	}
-	factory := &fakeMonitorFactory{service: service}
+	factory := &fakeBetterStackFactory{monitor: service}
 
-	r := &BetterStackMonitorReconciler{
-		Client:         client,
-		Scheme:         scheme,
-		MonitorFactory: factory.build,
-	}
+	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme, Clients: factory}
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
@@ -411,13 +403,9 @@ func TestReconcileHandlesDeletion(t *testing.T) {
 			return nil
 		},
 	}
-	factory := &fakeMonitorFactory{service: service}
+	factory := &fakeBetterStackFactory{monitor: service}
 
-	r := &BetterStackMonitorReconciler{
-		Client:         client,
-		Scheme:         scheme,
-		MonitorFactory: factory.build,
-	}
+	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme, Clients: factory}
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
@@ -467,13 +455,9 @@ func TestReconcileHandlesDeletionMissingCredentials(t *testing.T) {
 		WithStatusSubresource(monitor).
 		WithObjects(monitor.DeepCopy()).
 		Build()
-	factory := &fakeMonitorFactory{t: t, service: &fakeMonitorService{t: t}}
+	factory := &fakeBetterStackFactory{t: t, monitor: &fakeMonitorService{t: t}}
 
-	r := &BetterStackMonitorReconciler{
-		Client:         client,
-		Scheme:         scheme,
-		MonitorFactory: factory.build,
-	}
+	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme, Clients: factory}
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
@@ -535,13 +519,9 @@ func TestReconcileHandlesDeletionRemoteNotFound(t *testing.T) {
 			return &betterstack.APIError{StatusCode: http.StatusNotFound}
 		},
 	}
-	factory := &fakeMonitorFactory{service: service}
+	factory := &fakeBetterStackFactory{monitor: service}
 
-	r := &BetterStackMonitorReconciler{
-		Client:         client,
-		Scheme:         scheme,
-		MonitorFactory: factory.build,
-	}
+	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme, Clients: factory}
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
@@ -652,13 +632,9 @@ func TestReconcileReturnsErrorWhenStatusPatchFails(t *testing.T) {
 			return betterstack.Monitor{ID: "new-id"}, nil
 		},
 	}
-	factory := &fakeMonitorFactory{service: service}
+	factory := &fakeBetterStackFactory{monitor: service}
 
-	r := &BetterStackMonitorReconciler{
-		Client:         failingClient,
-		Scheme:         scheme,
-		MonitorFactory: factory.build,
-	}
+	r := &BetterStackMonitorReconciler{Client: failingClient, Scheme: scheme, Clients: factory}
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
@@ -695,25 +671,33 @@ func findCondition(conditions []metav1.Condition, condType string) *metav1.Condi
 	return nil
 }
 
-type fakeMonitorFactory struct {
+type fakeBetterStackFactory struct {
 	t           *testing.T
-	service     *fakeMonitorService
+	monitor     *fakeMonitorService
+	heartbeat   betterstack.HeartbeatClient
 	calls       int
 	lastBaseURL string
 	lastToken   string
 }
 
-func (f *fakeMonitorFactory) build(baseURL, token string, _ *http.Client) betterstack.MonitorClient {
+func (f *fakeBetterStackFactory) Monitor(baseURL, token string, _ *http.Client) betterstack.MonitorClient {
 	f.calls++
 	f.lastBaseURL = baseURL
 	f.lastToken = token
-	if f.service == nil {
+	if f.monitor == nil {
 		if f.t != nil {
 			f.t.Fatalf("monitor service not provided")
 		}
-		return nil
+		return &fakeMonitorService{}
 	}
-	return f.service
+	return f.monitor
+}
+
+func (f *fakeBetterStackFactory) Heartbeat(baseURL, token string, _ *http.Client) betterstack.HeartbeatClient {
+	if f.heartbeat != nil {
+		return f.heartbeat
+	}
+	return nil
 }
 
 type fakeMonitorService struct {
