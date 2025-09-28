@@ -53,8 +53,8 @@ func TestReconcileAddsFinalizer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reconcile returned error: %v", err)
 	}
-	if !res.Requeue {
-		t.Fatalf("expected requeue when finalizer is added")
+	if res.Requeue || res.RequeueAfter != 0 {
+		t.Fatalf("expected no explicit requeue, got %#v", res)
 	}
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}

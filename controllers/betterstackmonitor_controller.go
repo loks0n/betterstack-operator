@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -60,7 +61,7 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if err := r.Update(ctx, monitor); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{}, nil
 		}
 	} else {
 		return r.handleDelete(ctx, monitor)
@@ -340,9 +341,7 @@ func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existin
 	}
 	if len(spec.EnvironmentVariables) > 0 {
 		req.EnvironmentVariables = make(map[string]string, len(spec.EnvironmentVariables))
-		for k, v := range spec.EnvironmentVariables {
-			req.EnvironmentVariables[k] = v
-		}
+		maps.Copy(req.EnvironmentVariables, spec.EnvironmentVariables)
 	}
 	if spec.PlaywrightScript != "" {
 		req.PlaywrightScript = stringPtr(spec.PlaywrightScript)
