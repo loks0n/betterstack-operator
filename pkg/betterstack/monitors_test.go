@@ -6,10 +6,12 @@ import (
 	"io"
 	"net/http"
 	"testing"
+
+	"loks0n/betterstack-operator/internal/testutil/httpmock"
 )
 
 func TestMonitorServiceCreate(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", req.Method)
 		}
@@ -45,7 +47,7 @@ func TestMonitorServiceCreate(t *testing.T) {
 			t.Fatalf("expected additional attribute, got %v", val)
 		}
 
-		return jsonResponse(http.StatusCreated, `{"data":{"id":"monitor-1","type":"monitor","attributes":{}}}`), nil
+		return httpmock.JSONResponse(http.StatusCreated, `{"data":{"id":"monitor-1","type":"monitor","attributes":{}}}`), nil
 	})})
 
 	monitorType := "status"
@@ -75,7 +77,7 @@ func TestMonitorServiceCreate(t *testing.T) {
 }
 
 func TestMonitorServiceUpdate(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPatch {
 			t.Fatalf("unexpected method: %s", req.Method)
 		}
@@ -95,7 +97,7 @@ func TestMonitorServiceUpdate(t *testing.T) {
 			t.Fatalf("expected paused true, got %v", payload["paused"])
 		}
 
-		return jsonResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"monitor","attributes":{}}}`), nil
+		return httpmock.JSONResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"monitor","attributes":{}}}`), nil
 	})})
 
 	paused := true
@@ -112,7 +114,7 @@ func TestMonitorServiceUpdate(t *testing.T) {
 
 func TestMonitorServiceDelete(t *testing.T) {
 	deleted := false
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodDelete {
 			t.Fatalf("unexpected method: %s", req.Method)
 		}
@@ -120,7 +122,7 @@ func TestMonitorServiceDelete(t *testing.T) {
 			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
 		}
 		deleted = true
-		return jsonResponse(http.StatusNoContent, "{}"), nil
+		return httpmock.JSONResponse(http.StatusNoContent, "{}"), nil
 	})})
 
 	if err := client.Monitors.Delete(context.Background(), "abc/123"); err != nil {
@@ -132,8 +134,8 @@ func TestMonitorServiceDelete(t *testing.T) {
 }
 
 func TestMonitorServiceDeleteNotFound(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusNotFound, "{}"), nil
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return httpmock.JSONResponse(http.StatusNotFound, "{}"), nil
 	})})
 
 	if err := client.Monitors.Delete(context.Background(), "missing"); err != nil {
@@ -142,11 +144,11 @@ func TestMonitorServiceDeleteNotFound(t *testing.T) {
 }
 
 func TestMonitorServiceGet(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.EscapedPath() != "/monitors/abc%2F123" {
 			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
 		}
-		return jsonResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"monitor","attributes":{"url":"https://example.com"}}}`), nil
+		return httpmock.JSONResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"monitor","attributes":{"url":"https://example.com"}}}`), nil
 	})})
 
 	monitor, err := client.Monitors.Get(context.Background(), "abc/123")
@@ -162,8 +164,8 @@ func TestMonitorServiceGet(t *testing.T) {
 }
 
 func TestMonitorServiceGetNotFound(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusNotFound, `{"errors":"Resource with provided ID was not found"}`), nil
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return httpmock.JSONResponse(http.StatusNotFound, `{"errors":"Resource with provided ID was not found"}`), nil
 	})})
 
 	if _, err := client.Monitors.Get(context.Background(), "missing"); err == nil {

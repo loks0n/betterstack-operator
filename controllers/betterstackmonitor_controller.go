@@ -2,56 +2,47 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
+
+	"k8s.io/utils/ptr"
 
 	monitoringv1alpha1 "loks0n/betterstack-operator/api/v1alpha1"
+	"loks0n/betterstack-operator/internal/controller/conditions"
+	"loks0n/betterstack-operator/internal/controller/credentials"
 	"loks0n/betterstack-operator/pkg/betterstack"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const (
-	requeueIntervalOnError = time.Minute
-)
-
-// BetterStackMonitorReconciler reconciles BetterStackMonitor resources.
-type BetterStackMonitorReconciler struct {
-	client.Client
-	Scheme         *runtime.Scheme
-	HTTPClient     *http.Client
-	Clients BetterStackClientFactory
-}
-
 // BetterStackClientFactory provides Better Stack API clients for reconcilers.
-type BetterStackClientFactory interface {
+type BetterStackMonitorClientFactory interface {
 	Monitor(baseURL, token string, httpClient *http.Client) betterstack.MonitorClient
-	Heartbeat(baseURL, token string, httpClient *http.Client) betterstack.HeartbeatClient
 }
 
-type defaultBetterStackClientFactory struct{}
+type defaultBetterStackMonitorClientFactory struct{}
 
-func (defaultBetterStackClientFactory) Monitor(baseURL, token string, httpClient *http.Client) betterstack.MonitorClient {
+func (defaultBetterStackMonitorClientFactory) Monitor(baseURL, token string, httpClient *http.Client) betterstack.MonitorClient {
 	client := betterstack.NewClient(baseURL, token, httpClient)
 	return client.Monitors
 }
 
-func (defaultBetterStackClientFactory) Heartbeat(baseURL, token string, httpClient *http.Client) betterstack.HeartbeatClient {
-	client := betterstack.NewClient(baseURL, token, httpClient)
-	return client.Heartbeats
+// BetterStackMonitorReconciler reconciles BetterStackMonitor resources.
+type BetterStackMonitorReconciler struct {
+	client.Client
+	Scheme     *runtime.Scheme
+	HTTPClient *http.Client
+	Clients    BetterStackMonitorClientFactory
 }
 
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors,verbs=get;list;watch;create;update;patch;delete
@@ -82,20 +73,20 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return r.handleDelete(ctx, monitor)
 	}
 
-	token, err := r.fetchAPIToken(ctx, monitor.Namespace, monitor.Spec.APITokenSecretRef)
+	token, err := credentials.FetchAPIToken(ctx, r.Client, monitor.Namespace, monitor.Spec.APITokenSecretRef)
 	if err != nil {
 		logger.Error(err, "unable to fetch Better Stack API token")
 		_ = r.patchStatus(ctx, monitor, func(status *monitoringv1alpha1.BetterStackMonitorStatus) {
 			now := metav1.Now()
-			status.SetCondition(newCondition(monitoringv1alpha1.ConditionCredentials, metav1.ConditionFalse, "TokenUnavailable", err.Error(), &now))
-			status.SetCondition(newCondition(monitoringv1alpha1.ConditionReady, metav1.ConditionFalse, "TokenUnavailable", "API credentials not available", &now))
+			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionCredentials, metav1.ConditionFalse, "TokenUnavailable", err.Error(), &now))
+			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionReady, metav1.ConditionFalse, "TokenUnavailable", "API credentials not available", &now))
 		})
 		return ctrl.Result{RequeueAfter: requeueIntervalOnError}, nil
 	}
 
 	_ = r.patchStatus(ctx, monitor, func(status *monitoringv1alpha1.BetterStackMonitorStatus) {
 		now := metav1.Now()
-		status.SetCondition(newCondition(monitoringv1alpha1.ConditionCredentials, metav1.ConditionTrue, "TokenResolved", fmt.Sprintf("Using secret %s/%s", monitor.Namespace, monitor.Spec.APITokenSecretRef.Name), &now))
+		status.SetCondition(conditions.New(monitoringv1alpha1.ConditionCredentials, metav1.ConditionTrue, "TokenResolved", fmt.Sprintf("Using secret %s/%s", monitor.Namespace, monitor.Spec.APITokenSecretRef.Name), &now))
 	})
 
 	monitorAPI := r.monitorService(monitor.Spec.BaseURL, token)
@@ -129,8 +120,8 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		logger.Error(err, "unable to reconcile Better Stack monitor")
 		_ = r.patchStatus(ctx, monitor, func(status *monitoringv1alpha1.BetterStackMonitorStatus) {
 			now := metav1.Now()
-			status.SetCondition(newCondition(monitoringv1alpha1.ConditionSync, metav1.ConditionFalse, "SyncFailed", err.Error(), &now))
-			status.SetCondition(newCondition(monitoringv1alpha1.ConditionReady, metav1.ConditionFalse, "SyncFailed", "Monitor reconciliation failed", &now))
+			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionSync, metav1.ConditionFalse, "SyncFailed", err.Error(), &now))
+			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionReady, metav1.ConditionFalse, "SyncFailed", "Monitor reconciliation failed", &now))
 		})
 		return ctrl.Result{RequeueAfter: requeueIntervalOnError}, nil
 	}
@@ -140,8 +131,8 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		status.MonitorID = apiMonitor.ID
 		status.ObservedGeneration = monitor.Generation
 		status.LastSyncedTime = &now
-		status.SetCondition(newCondition(monitoringv1alpha1.ConditionSync, metav1.ConditionTrue, "MonitorSynced", "Monitor synchronized with Better Stack", &now))
-		status.SetCondition(newCondition(monitoringv1alpha1.ConditionReady, metav1.ConditionTrue, "MonitorSynced", "Monitor synchronized with Better Stack", &now))
+		status.SetCondition(conditions.New(monitoringv1alpha1.ConditionSync, metav1.ConditionTrue, "MonitorSynced", "Monitor synchronized with Better Stack", &now))
+		status.SetCondition(conditions.New(monitoringv1alpha1.ConditionReady, metav1.ConditionTrue, "MonitorSynced", "Monitor synchronized with Better Stack", &now))
 	})
 	if updateErr != nil {
 		return ctrl.Result{}, updateErr
@@ -158,7 +149,7 @@ func (r *BetterStackMonitorReconciler) handleDelete(ctx context.Context, monitor
 	}
 
 	if monitor.Status.MonitorID != "" {
-		token, err := r.fetchAPIToken(ctx, monitor.Namespace, monitor.Spec.APITokenSecretRef)
+		token, err := credentials.FetchAPIToken(ctx, r.Client, monitor.Namespace, monitor.Spec.APITokenSecretRef)
 		if err != nil {
 			logger.Info("skipping remote monitor deletion due to missing credentials", "monitorID", monitor.Status.MonitorID, "error", err)
 		} else {
@@ -176,29 +167,6 @@ func (r *BetterStackMonitorReconciler) handleDelete(ctx context.Context, monitor
 	return ctrl.Result{}, nil
 }
 
-func (r *BetterStackMonitorReconciler) fetchAPIToken(ctx context.Context, namespace string, selector corev1.SecretKeySelector) (string, error) {
-	if selector.Name == "" {
-		return "", errors.New("apiTokenSecretRef.name must be specified")
-	}
-
-	key := types.NamespacedName{Name: selector.Name, Namespace: namespace}
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, key, secret); err != nil {
-		return "", err
-	}
-
-	tokenBytes, ok := secret.Data[selector.Key]
-	if !ok {
-		return "", fmt.Errorf("secret %s/%s missing key %s", namespace, selector.Name, selector.Key)
-	}
-
-	if len(tokenBytes) == 0 {
-		return "", fmt.Errorf("secret %s/%s key %s is empty", namespace, selector.Name, selector.Key)
-	}
-
-	return string(tokenBytes), nil
-}
-
 func (r *BetterStackMonitorReconciler) patchStatus(ctx context.Context, monitor *monitoringv1alpha1.BetterStackMonitor, mutate func(*monitoringv1alpha1.BetterStackMonitorStatus)) error {
 	base := monitor.DeepCopy()
 	mutate(&monitor.Status)
@@ -209,27 +177,27 @@ func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existin
 	req := betterstack.MonitorCreateRequest{}
 
 	if spec.URL != "" {
-		req.URL = stringPtr(spec.URL)
+		req.URL = ptr.To(spec.URL)
 	}
 	if spec.Name != "" {
-		req.PronounceableName = stringPtr(spec.Name)
+		req.PronounceableName = ptr.To(spec.Name)
 	}
 	if spec.MonitorType != "" {
-		req.MonitorType = stringPtr(spec.MonitorType)
+		req.MonitorType = ptr.To(spec.MonitorType)
 	}
 	if spec.TeamName != "" {
-		req.TeamName = stringPtr(spec.TeamName)
+		req.TeamName = ptr.To(spec.TeamName)
 	}
 	if spec.CheckFrequencyMinutes > 0 {
 		frequency := spec.CheckFrequencyMinutes * 60
-		req.CheckFrequency = intPtr(frequency)
+		req.CheckFrequency = ptr.To(frequency)
 	}
 	if len(spec.Regions) > 0 {
 		req.Regions = append([]string(nil), spec.Regions...)
 	}
 	if spec.RequestMethod != "" {
 		method := strings.ToLower(spec.RequestMethod)
-		req.HTTPMethod = stringPtr(method)
+		req.HTTPMethod = ptr.To(method)
 	}
 	if len(spec.ExpectedStatusCodes) > 0 {
 		req.ExpectedStatusCodes = append([]int(nil), spec.ExpectedStatusCodes...)
@@ -237,9 +205,9 @@ func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existin
 		req.ExpectedStatusCodes = []int{spec.ExpectedStatusCode}
 	}
 	if spec.RequiredKeyword != "" {
-		req.RequiredKeyword = stringPtr(spec.RequiredKeyword)
+		req.RequiredKeyword = ptr.To(spec.RequiredKeyword)
 	}
-	req.Paused = boolPtrValue(spec.Paused)
+	req.Paused = ptr.To(spec.Paused)
 
 	if spec.Email != nil {
 		req.Email = spec.Email
@@ -267,28 +235,26 @@ func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existin
 	}
 
 	if spec.PolicyID != "" {
-		req.PolicyID = stringPtr(spec.PolicyID)
+		req.PolicyID = ptr.To(spec.PolicyID)
 	}
 	if spec.ExpirationPolicyID != "" {
-		req.ExpirationPolicyID = stringPtr(spec.ExpirationPolicyID)
+		req.ExpirationPolicyID = ptr.To(spec.ExpirationPolicyID)
 	}
 	if spec.MonitorGroupID != "" {
-		req.MonitorGroupID = stringPtr(spec.MonitorGroupID)
+		req.MonitorGroupID = ptr.To(spec.MonitorGroupID)
 	}
 	if spec.TeamWaitSeconds > 0 {
-		req.TeamWait = intPtr(spec.TeamWaitSeconds)
+		req.TeamWait = ptr.To(spec.TeamWaitSeconds)
 	}
 	if spec.DomainExpirationDays > 0 {
-		req.DomainExpiration = intPtr(spec.DomainExpirationDays)
+		req.DomainExpiration = ptr.To(spec.DomainExpirationDays)
 	}
 	if spec.SSLExpirationDays > 0 {
-		req.SSLExpiration = intPtr(spec.SSLExpirationDays)
+		req.SSLExpiration = ptr.To(spec.SSLExpirationDays)
 	}
 	if spec.Port > 0 {
-		// Better Stack expects ports as strings (e.g. "25,465"); convert from the
-		// integer we expose on the CRD for friendlier YAML.
 		port := strconv.Itoa(spec.Port)
-		req.Port = stringPtr(port)
+		req.Port = ptr.To(port)
 	}
 	if spec.RequestTimeoutSeconds > 0 {
 		timeout := spec.RequestTimeoutSeconds
@@ -296,28 +262,28 @@ func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existin
 		case "ping", "tcp", "udp", "smtp", "pop", "imap", "dns":
 			timeout = timeout * 1000
 		}
-		req.RequestTimeout = intPtr(timeout)
+		req.RequestTimeout = ptr.To(timeout)
 	}
 	if spec.RecoveryPeriodSeconds > 0 {
-		req.RecoveryPeriod = intPtr(spec.RecoveryPeriodSeconds)
+		req.RecoveryPeriod = ptr.To(spec.RecoveryPeriodSeconds)
 	}
 	if spec.ConfirmationPeriodSeconds > 0 {
-		req.ConfirmationPeriod = intPtr(spec.ConfirmationPeriodSeconds)
+		req.ConfirmationPeriod = ptr.To(spec.ConfirmationPeriodSeconds)
 	}
 	if spec.IPVersion != "" {
-		req.IPVersion = stringPtr(spec.IPVersion)
+		req.IPVersion = ptr.To(spec.IPVersion)
 	}
 	if len(spec.MaintenanceDays) > 0 {
 		req.MaintenanceDays = append([]string(nil), spec.MaintenanceDays...)
 	}
 	if spec.MaintenanceFrom != "" {
-		req.MaintenanceFrom = stringPtr(spec.MaintenanceFrom)
+		req.MaintenanceFrom = ptr.To(spec.MaintenanceFrom)
 	}
 	if spec.MaintenanceTo != "" {
-		req.MaintenanceTo = stringPtr(spec.MaintenanceTo)
+		req.MaintenanceTo = ptr.To(spec.MaintenanceTo)
 	}
 	if spec.MaintenanceTimezone != "" {
-		req.MaintenanceTimezone = stringPtr(spec.MaintenanceTimezone)
+		req.MaintenanceTimezone = ptr.To(spec.MaintenanceTimezone)
 	}
 	if len(spec.RequestHeaders) > 0 {
 		existingHeaders := map[string][]betterstack.MonitorHeader{}
@@ -346,23 +312,23 @@ func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existin
 		}
 	}
 	if spec.RequestBody != "" {
-		req.RequestBody = stringPtr(spec.RequestBody)
+		req.RequestBody = ptr.To(spec.RequestBody)
 	}
 	if spec.AuthUsername != "" {
-		req.AuthUsername = stringPtr(spec.AuthUsername)
+		req.AuthUsername = ptr.To(spec.AuthUsername)
 	}
 	if spec.AuthPassword != "" {
-		req.AuthPassword = stringPtr(spec.AuthPassword)
+		req.AuthPassword = ptr.To(spec.AuthPassword)
 	}
 	if len(spec.EnvironmentVariables) > 0 {
 		req.EnvironmentVariables = make(map[string]string, len(spec.EnvironmentVariables))
 		maps.Copy(req.EnvironmentVariables, spec.EnvironmentVariables)
 	}
 	if spec.PlaywrightScript != "" {
-		req.PlaywrightScript = stringPtr(spec.PlaywrightScript)
+		req.PlaywrightScript = ptr.To(spec.PlaywrightScript)
 	}
 	if spec.ScenarioName != "" {
-		req.ScenarioName = stringPtr(spec.ScenarioName)
+		req.ScenarioName = ptr.To(spec.ScenarioName)
 	}
 	if len(spec.AdditionalAttributes) > 0 {
 		req.AdditionalAttributes = make(map[string]any, len(spec.AdditionalAttributes))
@@ -374,33 +340,6 @@ func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existin
 	return req
 }
 
-func stringPtr(v string) *string {
-	return &v
-}
-
-func intPtr(v int) *int {
-	return &v
-}
-
-func boolPtrValue(v bool) *bool {
-	return &v
-}
-
-func newCondition(conditionType string, status metav1.ConditionStatus, reason, message string, transitionTime *metav1.Time) metav1.Condition {
-	cond := metav1.Condition{
-		Type:    conditionType,
-		Status:  status,
-		Reason:  reason,
-		Message: message,
-	}
-	if transitionTime != nil {
-		cond.LastTransitionTime = *transitionTime
-	} else {
-		cond.LastTransitionTime = metav1.Now()
-	}
-	return cond
-}
-
 func (r *BetterStackMonitorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&monitoringv1alpha1.BetterStackMonitor{}).
@@ -410,7 +349,11 @@ func (r *BetterStackMonitorReconciler) SetupWithManager(mgr ctrl.Manager) error 
 func (r *BetterStackMonitorReconciler) monitorService(baseURL, token string) betterstack.MonitorClient {
 	factory := r.Clients
 	if factory == nil {
-		factory = defaultBetterStackClientFactory{}
+		factory = defaultBetterStackMonitorClientFactory{}
 	}
 	return factory.Monitor(baseURL, token, r.HTTPClient)
+}
+
+func (r *BetterStackMonitorReconciler) fetchAPIToken(ctx context.Context, namespace string, selector corev1.SecretKeySelector) (string, error) {
+	return credentials.FetchAPIToken(ctx, r.Client, namespace, selector)
 }

@@ -11,15 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	stdruntime "runtime"
 	"strings"
 	"testing"
 	"time"
-
-	monitoringv1alpha1 "loks0n/betterstack-operator/api/v1alpha1"
-	"loks0n/betterstack-operator/controllers"
-	"loks0n/betterstack-operator/pkg/betterstack"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -32,10 +27,16 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	monitoringv1alpha1 "loks0n/betterstack-operator/api/v1alpha1"
+	"loks0n/betterstack-operator/controllers"
+	"loks0n/betterstack-operator/internal/testutil/assert"
+	"loks0n/betterstack-operator/pkg/betterstack"
 )
 
 func TestBetterStackMonitorLifecycle(t *testing.T) {
@@ -134,14 +135,14 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 			CheckFrequencyMinutes:     3,
 			ExpectedStatusCodes:       []int{200},
 			RequestMethod:             "HEAD",
-			FollowRedirects:           boolPtr(false),
-			RememberCookies:           boolPtr(false),
-			VerifySSL:                 boolPtr(true),
-			Email:                     boolPtr(false),
-			SMS:                       boolPtr(true),
-			Call:                      boolPtr(false),
-			Push:                      boolPtr(true),
-			CriticalAlert:             boolPtr(true),
+			FollowRedirects:           ptr.To(false),
+			RememberCookies:           ptr.To(false),
+			VerifySSL:                 ptr.To(true),
+			Email:                     ptr.To(false),
+			SMS:                       ptr.To(true),
+			Call:                      ptr.To(false),
+			Push:                      ptr.To(true),
+			CriticalAlert:             ptr.To(true),
 			TeamWaitSeconds:           120,
 			DomainExpirationDays:      14,
 			SSLExpirationDays:         30,
@@ -184,31 +185,33 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 
 	remoteMonitor := fetchRemoteMonitor(t, ctx, apiClient, monitorID)
 	attrs := remoteMonitor.Attributes
-	expectString(t, "url", attrs.URL, monitorURL)
-	expectString(t, "monitor_type", attrs.MonitorType, "status")
-	expectString(t, "http_method", attrs.HTTPMethod, "head")
-	expectInt(t, "check_frequency", attrs.CheckFrequency, 180)
-	expectIntSlice(t, "expected_status_codes", attrs.ExpectedStatusCodes, []int{200})
-	expectBool(t, "follow_redirects", attrs.FollowRedirects, false)
-	expectBool(t, "remember_cookies", attrs.RememberCookies, false)
-	expectBool(t, "verify_ssl", attrs.VerifySSL, true)
-	expectBool(t, "email", attrs.Email, false)
-	expectBool(t, "sms", attrs.SMS, true)
-	expectBool(t, "call", attrs.Call, false)
-	expectBool(t, "push", attrs.Push, true)
-	expectBool(t, "critical_alert", attrs.CriticalAlert, true)
-	expectIntPtr(t, "team_wait", attrs.TeamWait, 120)
-	expectIntPtr(t, "domain_expiration", attrs.DomainExpiration, 14)
-	expectIntPtr(t, "ssl_expiration", attrs.SSLExpiration, 30)
-	expectInt(t, "request_timeout", attrs.RequestTimeout, 10)
-	expectInt(t, "recovery_period", attrs.RecoveryPeriod, 180)
-	expectInt(t, "confirmation_period", attrs.ConfirmationPeriod, 90)
-	expectStringPtr(t, "ip_version", attrs.IPVersion, "ipv4")
-	expectStringSlice(t, "maintenance_days", attrs.MaintenanceDays, []string{"mon", "tue"})
-	expectString(t, "maintenance_from", attrs.MaintenanceFrom, "01:00:00")
-	expectString(t, "maintenance_to", attrs.MaintenanceTo, "02:00:00")
-	expectString(t, "maintenance_timezone", attrs.MaintenanceTimezone, "UTC")
-	expectRequestHeader(t, attrs.RequestHeaders, "X-E2E", "initial")
+	assert.String(t, "url", attrs.URL, monitorURL)
+	assert.String(t, "monitor_type", attrs.MonitorType, "status")
+	assert.String(t, "http_method", attrs.HTTPMethod, "head")
+	assert.Int(t, "check_frequency", attrs.CheckFrequency, 180)
+	assert.IntSlice(t, "expected_status_codes", attrs.ExpectedStatusCodes, []int{200})
+	assert.Bool(t, "follow_redirects", attrs.FollowRedirects, false)
+	assert.Bool(t, "remember_cookies", attrs.RememberCookies, false)
+	assert.Bool(t, "verify_ssl", attrs.VerifySSL, true)
+	assert.Bool(t, "email", attrs.Email, false)
+	assert.Bool(t, "sms", attrs.SMS, true)
+	assert.Bool(t, "call", attrs.Call, false)
+	assert.Bool(t, "push", attrs.Push, true)
+	assert.Bool(t, "critical_alert", attrs.CriticalAlert, true)
+	assert.IntPtr(t, "team_wait", attrs.TeamWait, 120)
+	assert.IntPtr(t, "domain_expiration", attrs.DomainExpiration, 14)
+	assert.IntPtr(t, "ssl_expiration", attrs.SSLExpiration, 30)
+	assert.Int(t, "request_timeout", attrs.RequestTimeout, 10)
+	assert.Int(t, "recovery_period", attrs.RecoveryPeriod, 180)
+	assert.Int(t, "confirmation_period", attrs.ConfirmationPeriod, 90)
+	assert.StringPtr(t, "ip_version", attrs.IPVersion, "ipv4")
+	assert.StringSlice(t, "maintenance_days", attrs.MaintenanceDays, []string{"mon", "tue"})
+	assert.String(t, "maintenance_from", attrs.MaintenanceFrom, "01:00:00")
+	assert.String(t, "maintenance_to", attrs.MaintenanceTo, "02:00:00")
+	assert.String(t, "maintenance_timezone", attrs.MaintenanceTimezone, "UTC")
+	assert.Item(t, "request_headers", attrs.RequestHeaders, "X-E2E", "initial", func(h betterstack.MonitorHeader) (string, string) {
+		return h.Name, h.Value
+	})
 
 	// Update monitor name and pause flag.
 	if err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(monitor), monitor); err != nil {
@@ -219,13 +222,13 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 	monitor.Spec.CheckFrequencyMinutes = 5
 	monitor.Spec.ExpectedStatusCodes = []int{204, 205}
 	monitor.Spec.RequestMethod = "GET"
-	monitor.Spec.FollowRedirects = boolPtr(true)
-	monitor.Spec.RememberCookies = boolPtr(true)
-	monitor.Spec.VerifySSL = boolPtr(false)
-	monitor.Spec.Email = boolPtr(true)
-	monitor.Spec.SMS = boolPtr(false)
-	monitor.Spec.Push = boolPtr(false)
-	monitor.Spec.CriticalAlert = boolPtr(false)
+	monitor.Spec.FollowRedirects = ptr.To(true)
+	monitor.Spec.RememberCookies = ptr.To(true)
+	monitor.Spec.VerifySSL = ptr.To(false)
+	monitor.Spec.Email = ptr.To(true)
+	monitor.Spec.SMS = ptr.To(false)
+	monitor.Spec.Push = ptr.To(false)
+	monitor.Spec.CriticalAlert = ptr.To(false)
 	monitor.Spec.TeamWaitSeconds = 60
 	monitor.Spec.DomainExpirationDays = 7
 	monitor.Spec.SSLExpirationDays = 14
@@ -253,30 +256,32 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 	defer cancelUpdate()
 	updatedMonitor := fetchRemoteMonitor(t, ctxUpdate, apiClient, monitorID)
 	updated := updatedMonitor.Attributes
-	expectString(t, "pronounceable_name", updated.PronounceableName, "Updated E2E")
-	expectBool(t, "paused", updated.Paused, true)
-	expectString(t, "http_method", updated.HTTPMethod, "get")
-	expectInt(t, "check_frequency", updated.CheckFrequency, 300)
-	expectIntSlice(t, "expected_status_codes", updated.ExpectedStatusCodes, []int{204, 205})
-	expectBool(t, "follow_redirects", updated.FollowRedirects, true)
-	expectBool(t, "remember_cookies", updated.RememberCookies, true)
-	expectBool(t, "verify_ssl", updated.VerifySSL, false)
-	expectBool(t, "email", updated.Email, true)
-	expectBool(t, "sms", updated.SMS, false)
-	expectBool(t, "push", updated.Push, false)
-	expectBool(t, "critical_alert", updated.CriticalAlert, false)
-	expectIntPtr(t, "team_wait", updated.TeamWait, 60)
-	expectIntPtr(t, "domain_expiration", updated.DomainExpiration, 7)
-	expectIntPtr(t, "ssl_expiration", updated.SSLExpiration, 14)
-	expectInt(t, "request_timeout", updated.RequestTimeout, 45)
-	expectInt(t, "recovery_period", updated.RecoveryPeriod, 300)
-	expectInt(t, "confirmation_period", updated.ConfirmationPeriod, 120)
-	expectStringPtr(t, "ip_version", updated.IPVersion, "ipv6")
-	expectStringSlice(t, "maintenance_days", updated.MaintenanceDays, []string{"wed"})
-	expectString(t, "maintenance_from", updated.MaintenanceFrom, "02:00:00")
-	expectString(t, "maintenance_to", updated.MaintenanceTo, "03:00:00")
-	expectString(t, "maintenance_timezone", updated.MaintenanceTimezone, "Eastern Time (US & Canada)")
-	expectRequestHeader(t, updated.RequestHeaders, "X-E2E", "updated")
+	assert.String(t, "pronounceable_name", updated.PronounceableName, "Updated E2E")
+	assert.Bool(t, "paused", updated.Paused, true)
+	assert.String(t, "http_method", updated.HTTPMethod, "get")
+	assert.Int(t, "check_frequency", updated.CheckFrequency, 300)
+	assert.IntSlice(t, "expected_status_codes", updated.ExpectedStatusCodes, []int{204, 205})
+	assert.Bool(t, "follow_redirects", updated.FollowRedirects, true)
+	assert.Bool(t, "remember_cookies", updated.RememberCookies, true)
+	assert.Bool(t, "verify_ssl", updated.VerifySSL, false)
+	assert.Bool(t, "email", updated.Email, true)
+	assert.Bool(t, "sms", updated.SMS, false)
+	assert.Bool(t, "push", updated.Push, false)
+	assert.Bool(t, "critical_alert", updated.CriticalAlert, false)
+	assert.IntPtr(t, "team_wait", updated.TeamWait, 60)
+	assert.IntPtr(t, "domain_expiration", updated.DomainExpiration, 7)
+	assert.IntPtr(t, "ssl_expiration", updated.SSLExpiration, 14)
+	assert.Int(t, "request_timeout", updated.RequestTimeout, 45)
+	assert.Int(t, "recovery_period", updated.RecoveryPeriod, 300)
+	assert.Int(t, "confirmation_period", updated.ConfirmationPeriod, 120)
+	assert.StringPtr(t, "ip_version", updated.IPVersion, "ipv6")
+	assert.StringSlice(t, "maintenance_days", updated.MaintenanceDays, []string{"wed"})
+	assert.String(t, "maintenance_from", updated.MaintenanceFrom, "02:00:00")
+	assert.String(t, "maintenance_to", updated.MaintenanceTo, "03:00:00")
+	assert.String(t, "maintenance_timezone", updated.MaintenanceTimezone, "Eastern Time (US & Canada)")
+	assert.Item(t, "request_headers", updated.RequestHeaders, "X-E2E", "updated", func(h betterstack.MonitorHeader) (string, string) {
+		return h.Name, h.Value
+	})
 
 	if err := k8sClient.Delete(context.Background(), monitor); err != nil {
 		t.Fatalf("delete monitor: %v", err)
@@ -493,76 +498,4 @@ func loadDotEnvIfPresent(t *testing.T, root string) {
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("read .env: %v", err)
 	}
-}
-
-func boolPtr(v bool) *bool {
-	return &v
-}
-
-func expectString(t *testing.T, field, actual, expected string) {
-	t.Helper()
-	if actual != expected {
-		t.Fatalf("%s mismatch: got %q want %q", field, actual, expected)
-	}
-}
-
-func expectBool(t *testing.T, field string, actual, expected bool) {
-	t.Helper()
-	if actual != expected {
-		t.Fatalf("%s mismatch: got %v want %v", field, actual, expected)
-	}
-}
-
-func expectInt(t *testing.T, field string, actual, expected int) {
-	t.Helper()
-	if actual != expected {
-		t.Fatalf("%s mismatch: got %d want %d", field, actual, expected)
-	}
-}
-
-func expectIntPtr(t *testing.T, field string, ptr *int, expected int) {
-	t.Helper()
-	if ptr == nil {
-		t.Fatalf("%s is nil", field)
-	}
-	if *ptr != expected {
-		t.Fatalf("%s mismatch: got %d want %d", field, *ptr, expected)
-	}
-}
-
-func expectStringPtr(t *testing.T, field string, ptr *string, expected string) {
-	t.Helper()
-	if ptr == nil {
-		t.Fatalf("%s is nil", field)
-	}
-	if *ptr != expected {
-		t.Fatalf("%s mismatch: got %q want %q", field, *ptr, expected)
-	}
-}
-
-func expectIntSlice(t *testing.T, field string, actual, expected []int) {
-	t.Helper()
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("%s mismatch: got %v want %v", field, actual, expected)
-	}
-}
-
-func expectStringSlice(t *testing.T, field string, actual, expected []string) {
-	t.Helper()
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("%s mismatch: got %v want %v", field, actual, expected)
-	}
-}
-
-func expectRequestHeader(t *testing.T, headers []betterstack.MonitorHeader, name, value string) {
-	t.Helper()
-	for _, header := range headers {
-		if header.Name == name {
-			if header.Value != value {
-				t.Fatalf("header %q value mismatch: got %q want %q", name, header.Value, value)
-			}
-			return
-		}
-	}
-	t.Fatalf("header %q not found", name)
 }

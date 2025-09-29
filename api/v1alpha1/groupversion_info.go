@@ -20,6 +20,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(GroupVersion,
 		&BetterStackMonitor{},
 		&BetterStackMonitorList{},
+		&BetterStackHeartbeat{},
+		&BetterStackHeartbeatList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

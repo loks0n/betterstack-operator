@@ -6,10 +6,12 @@ import (
 	"io"
 	"net/http"
 	"testing"
+
+	"loks0n/betterstack-operator/internal/testutil/httpmock"
 )
 
 func TestHeartbeatServiceCreate(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", req.Method)
 		}
@@ -25,7 +27,7 @@ func TestHeartbeatServiceCreate(t *testing.T) {
 			t.Fatalf("expected name Example, got %v", name)
 		}
 
-		return jsonResponse(http.StatusCreated, `{"data":{"id":"67890","type":"heartbeat","attributes":{"status":"pending"}}}`), nil
+		return httpmock.JSONResponse(http.StatusCreated, `{"data":{"id":"67890","type":"heartbeat","attributes":{"status":"pending"}}}`), nil
 	})})
 
 	name := "Example"
@@ -42,7 +44,7 @@ func TestHeartbeatServiceCreate(t *testing.T) {
 }
 
 func TestHeartbeatServiceUpdate(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPatch {
 			t.Fatalf("unexpected method: %s", req.Method)
 		}
@@ -62,7 +64,7 @@ func TestHeartbeatServiceUpdate(t *testing.T) {
 			t.Fatalf("expected name Updated, got %v", name)
 		}
 
-		return jsonResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"heartbeat","attributes":{"status":"down","name":"Updated"}}}`), nil
+		return httpmock.JSONResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"heartbeat","attributes":{"status":"down","name":"Updated"}}}`), nil
 	})})
 
 	name := "Updated"
@@ -83,7 +85,7 @@ func TestHeartbeatServiceUpdate(t *testing.T) {
 
 func TestHeartbeatServiceDelete(t *testing.T) {
 	deleted := false
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodDelete {
 			t.Fatalf("unexpected method: %s", req.Method)
 		}
@@ -91,7 +93,7 @@ func TestHeartbeatServiceDelete(t *testing.T) {
 			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
 		}
 		deleted = true
-		return jsonResponse(http.StatusNoContent, "{}"), nil
+		return httpmock.JSONResponse(http.StatusNoContent, "{}"), nil
 	})})
 
 	if err := client.Heartbeats.Delete(context.Background(), "abc/123"); err != nil {
@@ -103,8 +105,8 @@ func TestHeartbeatServiceDelete(t *testing.T) {
 }
 
 func TestHeartbeatServiceDeleteNotFound(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusNotFound, "{}"), nil
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return httpmock.JSONResponse(http.StatusNotFound, "{}"), nil
 	})})
 
 	if err := client.Heartbeats.Delete(context.Background(), "missing"); err != nil {
@@ -113,11 +115,11 @@ func TestHeartbeatServiceDeleteNotFound(t *testing.T) {
 }
 
 func TestHeartbeatServiceGet(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.EscapedPath() != "/heartbeats/abc%2F123" {
 			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
 		}
-		return jsonResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"heartbeat","attributes":{"status":"up"}}}`), nil
+		return httpmock.JSONResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"heartbeat","attributes":{"status":"up"}}}`), nil
 	})})
 
 	heartbeat, err := client.Heartbeats.Get(context.Background(), "abc/123")
@@ -133,8 +135,8 @@ func TestHeartbeatServiceGet(t *testing.T) {
 }
 
 func TestHeartbeatServiceGetNotFound(t *testing.T) {
-	client := NewClient("https://api.test", "token", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusNotFound, `{"errors":"Resource with provided ID was not found"}`), nil
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return httpmock.JSONResponse(http.StatusNotFound, `{"errors":"Resource with provided ID was not found"}`), nil
 	})})
 
 	if _, err := client.Heartbeats.Get(context.Background(), "missing"); err == nil {

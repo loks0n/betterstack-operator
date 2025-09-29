@@ -1,29 +1,29 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: betterstackmonitors.monitoring.betterstack.io
+  name: betterstackheartbeats.monitoring.betterstack.io
 spec:
   group: monitoring.betterstack.io
   names:
-    kind: BetterStackMonitor
-    listKind: BetterStackMonitorList
-    plural: betterstackmonitors
-    singular: betterstackmonitor
+    kind: BetterStackHeartbeat
+    listKind: BetterStackHeartbeatList
+    plural: betterstackheartbeats
+    singular: betterstackheartbeat
     shortNames:
-      - bsmonitor
-      - bsm
+      - bsheartbeat
+      - bsh
   scope: Namespaced
   versions:
     - name: v1alpha1
       served: true
       storage: true
       additionalPrinterColumns:
-        - name: URL
+        - name: Name
           type: string
-          jsonPath: .spec.url
+          jsonPath: .spec.name
         - name: ID
           type: string
-          jsonPath: .status.monitorID
+          jsonPath: .status.heartbeatID
         - name: Ready
           type: string
           jsonPath: .status.conditions[?(@.type=="Ready")].status
@@ -34,81 +34,40 @@ spec:
             spec:
               type: object
               required:
-                - url
+                - name
+                - periodSeconds
                 - apiTokenSecretRef
               properties:
-                url:
-                  type: string
                 name:
                   type: string
-                monitorType:
-                  type: string
-                teamName:
-                  type: string
-                checkFrequencyMinutes:
+                periodSeconds:
                   type: integer
                   minimum: 1
-                regions:
-                  type: array
-                  items:
-                    type: string
-                requestMethod:
-                  type: string
-                expectedStatusCode:
+                graceSeconds:
                   type: integer
-                expectedStatusCodes:
-                  type: array
-                  items:
-                    type: integer
-                requiredKeyword:
+                  minimum: 0
+                teamName:
                   type: string
-                paused:
-                  type: boolean
-                email:
+                call:
                   type: boolean
                 sms:
                   type: boolean
-                call:
+                email:
                   type: boolean
                 push:
                   type: boolean
                 criticalAlert:
                   type: boolean
-                followRedirects:
-                  type: boolean
-                verifySSL:
-                  type: boolean
-                rememberCookies:
-                  type: boolean
-                policyID:
-                  type: string
-                expirationPolicyID:
-                  type: string
-                monitorGroupID:
-                  type: string
                 teamWaitSeconds:
                   type: integer
                   minimum: 0
-                domainExpirationDays:
+                heartbeatGroupID:
                   type: integer
                   minimum: 0
-                sslExpirationDays:
+                sortIndex:
                   type: integer
-                  minimum: 0
-                port:
-                  type: integer
-                  minimum: 0
-                requestTimeoutSeconds:
-                  type: integer
-                  minimum: 0
-                recoveryPeriodSeconds:
-                  type: integer
-                  minimum: 0
-                confirmationPeriodSeconds:
-                  type: integer
-                  minimum: 0
-                ipVersion:
-                  type: string
+                paused:
+                  type: boolean
                 maintenanceDays:
                   type: array
                   items:
@@ -119,38 +78,11 @@ spec:
                   type: string
                 maintenanceTimezone:
                   type: string
-                requestHeaders:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      name:
-                        type: string
-                      value:
-                        type: string
-                    required:
-                      - name
-                      - value
-                requestBody:
+                policyID:
                   type: string
-                authUsername:
-                  type: string
-                authPassword:
-                  type: string
-                environmentVariables:
-                  type: object
-                  additionalProperties:
-                    type: string
-                playwrightScript:
-                  type: string
-                scenarioName:
-                  type: string
-                additionalAttributes:
-                  type: object
-                  additionalProperties:
-                    type: string
                 baseURL:
                   type: string
+                  format: uri
                 apiTokenSecretRef:
                   type: object
                   default:
@@ -164,10 +96,12 @@ spec:
                       type: string
                     key:
                       type: string
+                    optional:
+                      type: boolean
             status:
               type: object
               properties:
-                monitorID:
+                heartbeatID:
                   type: string
                 observedGeneration:
                   type: integer
@@ -200,5 +134,3 @@ spec:
                 lastSyncedTime:
                   type: string
                   format: date-time
-      subresources:
-        status: {}

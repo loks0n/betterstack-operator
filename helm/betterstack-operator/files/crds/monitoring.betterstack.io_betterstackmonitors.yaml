@@ -8,9 +8,10 @@ spec:
     kind: BetterStackMonitor
     listKind: BetterStackMonitorList
     plural: betterstackmonitors
-    singular: betteruptimonitor
+    singular: betterstackmonitor
     shortNames:
-      - bumonitor
+      - bsmonitor
+      - bsm
   scope: Namespaced
   versions:
     - name: v1alpha1
