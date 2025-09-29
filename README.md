@@ -1,10 +1,11 @@
 # Better Stack Operator
 
-The Better Stack Operator keeps Better Stack monitors in sync with Kubernetes by reconciling `BetterStackMonitor` custom resources into real monitors through the public Better Stack API.
+The Better Stack Operator keeps Better Stack monitors and heartbeats in sync with Kubernetes by reconciling `BetterStackMonitor` and `BetterStackHeartbeat` custom resources into real Better Stack resources through the public API.
 
 ## Highlights
 
 - **Full monitor coverage** – Configure monitor type, contact routes, SSL/domain expiration, maintenance windows, request headers, Playwright scripts, and more directly from Kubernetes.
+- **Heartbeat automation** – Manage Better Stack heartbeats, including grace windows, teams, alert toggles, and maintenance directly from manifests.
 - **Safe credential handling** – Secrets referenced via `apiTokenSecretRef` supply the Better Stack API token; the operator never persists tokens elsewhere.
 - **Lifecycle management** – Finalizers ensure remote monitors are removed when their CRs are deleted, preventing orphaned resources.
 - **Status you can trust** – `Ready`, `CredentialsAvailable`, and `Synced` conditions expose reconciliation health.
@@ -40,7 +41,7 @@ Choose how the controller should access the API token:
 
   helm upgrade --install betterstack-operator \
     oci://ghcr.io/loks0n/betterstack-operator/helm/betterstack-operator \
-    --version 0.0.2 \
+    --version 0.0.10 \
     --namespace betterstack-operator --create-namespace \
     --set credentials.existingSecret=betterstack-operator-credentials \
     --wait
@@ -48,7 +49,9 @@ Choose how the controller should access the API token:
 
 The chart-generated secret defaults to `betterstack-operator-credentials` in the release namespace. Use `credentials.secret.namespace` to move the primary secret and `credentials.secret.additionalNamespaces` to duplicate it; whichever path you choose, ensure the secret exists in every namespace where you create `BetterStackMonitor` objects.
 
-### 2. Create monitors
+### 2. Create resources
+
+#### Monitors
 
 Apply one of the sample CRs to verify the install:
 
@@ -67,6 +70,23 @@ kubectl describe betterstackmonitor demo-monitor
 
 Deleting a `BetterStackMonitor` automatically deletes the remote Better Stack monitor thanks to controller finalizers.
 
+#### Heartbeats
+
+Create a heartbeat and sync it to Better Stack:
+
+```bash
+kubectl apply -f config/samples/monitoring_v1alpha1_betterstackheartbeat.yaml
+```
+
+Inspect the resource with:
+
+```bash
+kubectl get betterstackheartbeats.monitoring.betterstack.io -A
+kubectl describe betterstackheartbeat demo-heartbeat
+```
+
+Deleting a `BetterStackHeartbeat` tears down the remote heartbeat after the finalizer runs.
+
 ### Configuration
 
 See `helm/betterstack-operator/values.yaml` for the full list. Frequently tuned values include:
@@ -82,7 +102,7 @@ See `helm/betterstack-operator/values.yaml` for the full list. Frequently tuned 
 - `rbac.create` – disable default RBAC when running with pre-provisioned roles.
 - `crds.install` – set to `false` when CRDs are installed out-of-band (e.g., via GitOps).
 
-## Spec Reference (excerpt)
+## Monitor Spec Reference (excerpt)
 
 | Field | Purpose |
 | --- | --- |
@@ -102,6 +122,24 @@ See `helm/betterstack-operator/values.yaml` for the full list. Frequently tuned 
 | `requestHeaders`, `requestBody`, `authUsername`, `authPassword` | HTTP customisation. |
 | `environmentVariables`, `playwrightScript`, `scenarioName` | Playwright monitor configuration. |
 | `additionalAttributes` | Raw overrides merged into the Better Stack API payload. |
+
+## Heartbeat Spec Reference (excerpt)
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Human friendly heartbeat name shown in Better Stack. |
+| `periodSeconds` | Frequency Better Stack expects check-ins. |
+| `graceSeconds` | Extra tolerance window after the period before alerting. |
+| `teamName` | Target Better Stack team (needed for global tokens). |
+| `call`, `sms`, `email`, `push`, `criticalAlert` | Opt individual notification channels in or out. |
+| `teamWaitSeconds` | Delay before escalating to the next team. |
+| `heartbeatGroupID` | Link the heartbeat to an existing Better Stack group. |
+| `sortIndex` | Reorder heartbeats in the Better Stack UI. |
+| `paused` | Pause the heartbeat without deleting it. |
+| `maintenanceDays`, `maintenanceFrom`, `maintenanceTo`, `maintenanceTimezone` | Maintenance window definition. |
+| `policyID` | Override the default Better Stack alert policy. |
+| `baseURL` | Better Stack API base URL override (defaults to `https://uptime.betterstack.com/api/v2`). |
+| `apiTokenSecretRef` | Secret reference containing the Better Stack API token (`key` defaults to `api-key`). |
 
 See `api/v1alpha1/betterstackmonitor_types.go` for the full schema and commentary.
 

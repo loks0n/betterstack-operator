@@ -1,0 +1,29 @@
+apiVersion: monitoring.betterstack.io/v1alpha1
+kind: BetterStackHeartbeat
+metadata:
+  name: demo-heartbeat
+  namespace: default
+spec:
+  name: Demo Heartbeat
+  periodSeconds: 60
+  graceSeconds: 30
+  teamName: platform
+  call: false
+  sms: true
+  email: true
+  push: true
+  criticalAlert: true
+  teamWaitSeconds: 120
+  heartbeatGroupID: 42
+  sortIndex: 10
+  paused: false
+  maintenanceDays:
+    - sat
+    - sun
+  maintenanceFrom: "01:00:00"
+  maintenanceTo: "02:00:00"
+  maintenanceTimezone: UTC
+  policyID: default-policy-id
+  apiTokenSecretRef:
+    name: betterstack-operator-credentials
+    key: api-key
