@@ -7,45 +7,39 @@ import (
 	"net/http"
 	"testing"
 
+	"loks0n/betterstack-operator/internal/testutil/assert"
 	"loks0n/betterstack-operator/internal/testutil/httpmock"
 )
 
 func TestMonitorServiceCreate(t *testing.T) {
 	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodPost {
-			t.Fatalf("unexpected method: %s", req.Method)
-		}
-		if req.URL.Path != "/monitors" {
-			t.Fatalf("unexpected path: %s", req.URL.Path)
-		}
+		assert.String(t, "method", req.Method, http.MethodPost)
+		assert.String(t, "path", req.URL.Path, "/monitors")
 
 		var payload map[string]any
-		withBody := json.NewDecoder(req.Body)
-		if err := withBody.Decode(&payload); err != nil {
-			t.Fatalf("decode payload: %v", err)
-		}
-		if payload["monitor_type"] != "status" {
-			t.Fatalf("unexpected monitor_type: %v", payload["monitor_type"])
-		}
-		if payload["url"] != "https://example.com" {
-			t.Fatalf("unexpected url: %v", payload["url"])
-		}
-		if payload["pronounceable_name"] != "Example" {
-			t.Fatalf("unexpected pronounceable_name: %v", payload["pronounceable_name"])
-		}
-		if payload["email"] != true {
-			t.Fatalf("expected email true, got %v", payload["email"])
-		}
-		if cf, ok := payload["check_frequency"].(float64); !ok || cf != 180 {
-			t.Fatalf("unexpected check_frequency: %v", payload["check_frequency"])
-		}
+		err := json.NewDecoder(req.Body).Decode(&payload)
+		assert.NoError(t, err, "decode payload")
+		monitorType, ok := payload["monitor_type"].(string)
+		assert.Bool(t, "monitor_type type", ok, true)
+		assert.String(t, "monitor_type", monitorType, "status")
+		url, ok := payload["url"].(string)
+		assert.Bool(t, "url type", ok, true)
+		assert.String(t, "url", url, "https://example.com")
+		name, ok := payload["pronounceable_name"].(string)
+		assert.Bool(t, "pronounceable_name type", ok, true)
+		assert.String(t, "pronounceable_name", name, "Example")
+		email, ok := payload["email"].(bool)
+		assert.Bool(t, "email type", ok, true)
+		assert.Bool(t, "email", email, true)
+		cf, ok := payload["check_frequency"].(float64)
+		assert.Bool(t, "check_frequency type", ok, true)
+		assert.Int(t, "check_frequency", int(cf), 180)
 		headers, ok := payload["request_headers"].([]any)
-		if !ok || len(headers) != 1 {
-			t.Fatalf("unexpected request_headers: %v", payload["request_headers"])
-		}
-		if val := payload["custom"]; val != "value" {
-			t.Fatalf("expected additional attribute, got %v", val)
-		}
+		assert.Bool(t, "request_headers type", ok, true)
+		assert.Int(t, "request_headers length", len(headers), 1)
+		custom, ok := payload["custom"].(string)
+		assert.Bool(t, "custom type", ok, true)
+		assert.String(t, "custom attribute", custom, "value")
 
 		return httpmock.JSONResponse(http.StatusCreated, `{"data":{"id":"monitor-1","type":"monitor","attributes":{}}}`), nil
 	})})
@@ -68,34 +62,21 @@ func TestMonitorServiceCreate(t *testing.T) {
 	}
 
 	monitor, err := client.Monitors.Create(context.Background(), req)
-	if err != nil {
-		t.Fatalf("CreateMonitor error: %v", err)
-	}
-	if monitor.ID != "monitor-1" {
-		t.Fatalf("unexpected id: %s", monitor.ID)
-	}
+	assert.NoError(t, err, "CreateMonitor")
+	assert.String(t, "id", monitor.ID, "monitor-1")
 }
 
 func TestMonitorServiceUpdate(t *testing.T) {
 	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodPatch {
-			t.Fatalf("unexpected method: %s", req.Method)
-		}
-		if req.URL.EscapedPath() != "/monitors/abc%2F123" {
-			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
-		}
+		assert.String(t, "method", req.Method, http.MethodPatch)
+		assert.String(t, "path", req.URL.EscapedPath(), "/monitors/abc%2F123")
 
 		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
+		assert.NoError(t, err, "read body")
 		var payload map[string]any
-		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("decode payload: %v", err)
-		}
-		if payload["paused"] != true {
-			t.Fatalf("expected paused true, got %v", payload["paused"])
-		}
+		err = json.Unmarshal(body, &payload)
+		assert.NoError(t, err, "decode payload")
+		assert.Equal(t, "paused", payload["paused"], true)
 
 		return httpmock.JSONResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"monitor","attributes":{}}}`), nil
 	})})
@@ -104,33 +85,22 @@ func TestMonitorServiceUpdate(t *testing.T) {
 	req := MonitorUpdateRequest{Paused: &paused}
 
 	monitor, err := client.Monitors.Update(context.Background(), "abc/123", req)
-	if err != nil {
-		t.Fatalf("UpdateMonitor error: %v", err)
-	}
-	if monitor.ID != "abc/123" {
-		t.Fatalf("unexpected id: %s", monitor.ID)
-	}
+	assert.NoError(t, err, "UpdateMonitor")
+	assert.String(t, "id", monitor.ID, "abc/123")
 }
 
 func TestMonitorServiceDelete(t *testing.T) {
 	deleted := false
 	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodDelete {
-			t.Fatalf("unexpected method: %s", req.Method)
-		}
-		if req.URL.EscapedPath() != "/monitors/abc%2F123" {
-			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
-		}
+		assert.String(t, "method", req.Method, http.MethodDelete)
+		assert.String(t, "path", req.URL.EscapedPath(), "/monitors/abc%2F123")
 		deleted = true
 		return httpmock.JSONResponse(http.StatusNoContent, "{}"), nil
 	})})
 
-	if err := client.Monitors.Delete(context.Background(), "abc/123"); err != nil {
-		t.Fatalf("DeleteMonitor error: %v", err)
-	}
-	if !deleted {
-		t.Fatalf("expected delete call")
-	}
+	err := client.Monitors.Delete(context.Background(), "abc/123")
+	assert.NoError(t, err, "DeleteMonitor")
+	assert.Bool(t, "delete invoked", deleted, true)
 }
 
 func TestMonitorServiceDeleteNotFound(t *testing.T) {
@@ -138,29 +108,20 @@ func TestMonitorServiceDeleteNotFound(t *testing.T) {
 		return httpmock.JSONResponse(http.StatusNotFound, "{}"), nil
 	})})
 
-	if err := client.Monitors.Delete(context.Background(), "missing"); err != nil {
-		t.Fatalf("expected no error for not found delete, got %v", err)
-	}
+	err := client.Monitors.Delete(context.Background(), "missing")
+	assert.NoError(t, err, "DeleteMonitor missing")
 }
 
 func TestMonitorServiceGet(t *testing.T) {
 	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.EscapedPath() != "/monitors/abc%2F123" {
-			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
-		}
+		assert.String(t, "path", req.URL.EscapedPath(), "/monitors/abc%2F123")
 		return httpmock.JSONResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"monitor","attributes":{"url":"https://example.com"}}}`), nil
 	})})
 
 	monitor, err := client.Monitors.Get(context.Background(), "abc/123")
-	if err != nil {
-		t.Fatalf("GetMonitor error: %v", err)
-	}
-	if monitor.ID != "abc/123" {
-		t.Fatalf("unexpected id: %s", monitor.ID)
-	}
-	if monitor.Attributes.URL != "https://example.com" {
-		t.Fatalf("unexpected attributes: %+v", monitor.Attributes)
-	}
+	assert.NoError(t, err, "GetMonitor")
+	assert.String(t, "id", monitor.ID, "abc/123")
+	assert.String(t, "url", monitor.Attributes.URL, "https://example.com")
 }
 
 func TestMonitorServiceGetNotFound(t *testing.T) {
@@ -168,9 +129,7 @@ func TestMonitorServiceGetNotFound(t *testing.T) {
 		return httpmock.JSONResponse(http.StatusNotFound, `{"errors":"Resource with provided ID was not found"}`), nil
 	})})
 
-	if _, err := client.Monitors.Get(context.Background(), "missing"); err == nil {
-		t.Fatalf("expected error")
-	} else if !IsNotFound(err) {
-		t.Fatalf("expected not found, got %v", err)
-	}
+	_, err := client.Monitors.Get(context.Background(), "missing")
+	assert.Error(t, err, "expected missing monitor")
+	assert.Bool(t, "IsNotFound", IsNotFound(err), true)
 }

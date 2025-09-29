@@ -64,24 +64,16 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 
 	kubeconfigPath := fetchKubeconfig(t, clusterName)
 	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-	if err != nil {
-		t.Fatalf("build config: %v", err)
-	}
+	assert.NoError(t, err, "build config")
 
 	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatalf("add core scheme: %v", err)
-	}
-	if err := monitoringv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add cr scheme: %v", err)
-	}
+	assert.NoError(t, clientgoscheme.AddToScheme(scheme), "add core scheme")
+	assert.NoError(t, monitoringv1alpha1.AddToScheme(scheme), "add CR scheme")
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	k8sClient, err := client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
+	assert.NoError(t, err, "new client")
 
 	installCRD(t, cfg, rootDir)
 
@@ -96,18 +88,14 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 		HealthProbeBindAddress: "0",
 		LeaderElection:         false,
 	})
-	if err != nil {
-		t.Fatalf("new manager: %v", err)
-	}
+	assert.NoError(t, err, "new manager")
 
 	reconciler := &controllers.BetterStackMonitorReconciler{
 		Client:     manager.GetClient(),
 		Scheme:     manager.GetScheme(),
 		HTTPClient: &http.Client{Timeout: 30 * time.Second},
 	}
-	if err := reconciler.SetupWithManager(manager); err != nil {
-		t.Fatalf("setup reconciler: %v", err)
-	}
+	assert.NoError(t, reconciler.SetupWithManager(manager), "setup reconciler")
 
 	go func() {
 		if err := manager.Start(mgrCtx); err != nil {
@@ -119,8 +107,9 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "betterstack-credentials"},
 		Data:       map[string][]byte{"api-key": []byte(token)},
 	}
-	if err := k8sClient.Create(context.Background(), secret); err != nil && !errors.IsAlreadyExists(err) {
-		t.Fatalf("create secret: %v", err)
+	err = k8sClient.Create(context.Background(), secret)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		assert.NoError(t, err, "create secret")
 	}
 
 	uniqueSuffix := time.Now().UnixNano()
@@ -164,9 +153,7 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 		},
 	}
 
-	if err := k8sClient.Create(context.Background(), monitor); err != nil {
-		t.Fatalf("create monitor: %v", err)
-	}
+	assert.NoError(t, k8sClient.Create(context.Background(), monitor), "create monitor")
 
 	waitForCondition(t, k8sClient, monitor.Namespace, monitor.Name, func(obj *monitoringv1alpha1.BetterStackMonitor) bool {
 		return metaConditionStatus(obj.Status.Conditions, monitoringv1alpha1.ConditionReady) == metav1.ConditionTrue
@@ -214,9 +201,7 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 	})
 
 	// Update monitor name and pause flag.
-	if err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(monitor), monitor); err != nil {
-		t.Fatalf("get monitor: %v", err)
-	}
+	assert.NoError(t, k8sClient.Get(context.Background(), client.ObjectKeyFromObject(monitor), monitor), "get monitor for update")
 	monitor.Spec.Name = "Updated E2E"
 	monitor.Spec.Paused = true
 	monitor.Spec.CheckFrequencyMinutes = 5
@@ -244,9 +229,7 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 		Name:  "X-E2E",
 		Value: "updated",
 	}}
-	if err := k8sClient.Update(context.Background(), monitor); err != nil {
-		t.Fatalf("update monitor: %v", err)
-	}
+	assert.NoError(t, k8sClient.Update(context.Background(), monitor), "update monitor")
 
 	waitForCondition(t, k8sClient, monitor.Namespace, monitor.Name, func(obj *monitoringv1alpha1.BetterStackMonitor) bool {
 		return obj.Status.ObservedGeneration == obj.Generation
@@ -283,9 +266,7 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 		return h.Name, h.Value
 	})
 
-	if err := k8sClient.Delete(context.Background(), monitor); err != nil {
-		t.Fatalf("delete monitor: %v", err)
-	}
+	assert.NoError(t, k8sClient.Delete(context.Background(), monitor), "delete monitor")
 
 	err = wait.PollImmediate(2*time.Second, 90*time.Second, func() (bool, error) {
 		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: monitor.Name, Namespace: monitor.Namespace}, monitor)
@@ -294,22 +275,17 @@ func TestBetterStackMonitorLifecycle(t *testing.T) {
 		}
 		return false, err
 	})
-	if err != nil {
-		t.Fatalf("waiting for monitor delete: %v", err)
-	}
+	assert.NoError(t, err, "wait for monitor deletion")
 
 	ctxDelete, cancelDelete := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancelDelete()
-	if exists := monitorExists(ctxDelete, apiClient, monitorID); exists {
-		t.Fatalf("remote monitor %s still exists after deletion", monitorID)
-	}
+	assert.Bool(t, "remote monitor exists", monitorExists(ctxDelete, apiClient, monitorID), false)
 }
 
 func ensureBinary(t *testing.T, name string) {
 	t.Helper()
-	if _, err := exec.LookPath(name); err != nil {
-		t.Fatalf("required binary %q not found in PATH", name)
-	}
+	_, err := exec.LookPath(name)
+	assert.NoError(t, err, "required binary %s", name)
 }
 
 func createKindCluster(t *testing.T, clusterName string) {
@@ -328,36 +304,26 @@ func fetchKubeconfig(t *testing.T, clusterName string) string {
 	cmd := exec.Command("kind", "get", "kubeconfig", "--name", clusterName)
 	out := runCmd(t, cmd)
 	kubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("%s-kubeconfig", clusterName))
-	if err := os.WriteFile(kubeconfigPath, out, 0600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
-	}
+	assert.NoError(t, os.WriteFile(kubeconfigPath, out, 0o600), "write kubeconfig")
 	return kubeconfigPath
 }
 
 func installCRD(t *testing.T, cfg *rest.Config, root string) {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(root, "config", "crd", "bases", "monitoring.betterstack.io_betterstackmonitors.yaml"))
-	if err != nil {
-		t.Fatalf("read CRD: %v", err)
-	}
+	assert.NoError(t, err, "read CRD")
 	scheme := runtime.NewScheme()
 	_ = apiextensionsv1.AddToScheme(scheme)
 	decoder := serializer.NewCodecFactory(scheme).UniversalDeserializer()
 	obj, _, err := decoder.Decode(data, nil, nil)
-	if err != nil {
-		t.Fatalf("decode CRD: %v", err)
-	}
+	assert.NoError(t, err, "decode CRD")
 	crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
-	if !ok {
-		t.Fatalf("decoded object is not a CRD")
-	}
+	assert.Bool(t, "decoded CRD", ok, true)
 	extClient, err := apiextensionsclientset.NewForConfig(cfg)
-	if err != nil {
-		t.Fatalf("ext client: %v", err)
-	}
+	assert.NoError(t, err, "build extensions client")
 	if _, err := extClient.ApiextensionsV1().CustomResourceDefinitions().Create(context.Background(), crd, metav1.CreateOptions{}); err != nil {
 		if !errors.IsAlreadyExists(err) {
-			t.Fatalf("create CRD: %v", err)
+			assert.NoError(t, err, "create CRD")
 		}
 	}
 	err = wait.PollImmediate(2*time.Second, 60*time.Second, func() (bool, error) {
@@ -372,9 +338,7 @@ func installCRD(t *testing.T, cfg *rest.Config, root string) {
 		}
 		return false, nil
 	})
-	if err != nil {
-		t.Fatalf("waiting for CRD established: %v", err)
-	}
+	assert.NoError(t, err, "wait for CRD established")
 }
 
 func waitForCondition(t *testing.T, k8sClient client.Client, namespace, name string, predicate func(*monitoringv1alpha1.BetterStackMonitor) bool) {
@@ -389,9 +353,7 @@ func waitForCondition(t *testing.T, k8sClient client.Client, namespace, name str
 		}
 		return predicate(obj), nil
 	})
-	if err != nil {
-		t.Fatalf("condition not met for %s/%s: %v", namespace, name, err)
-	}
+	assert.NoError(t, err, "condition not met for %s/%s", namespace, name)
 }
 
 func waitForMonitorID(t *testing.T, k8sClient client.Client, namespace, name string) string {
@@ -411,18 +373,14 @@ func waitForMonitorID(t *testing.T, k8sClient client.Client, namespace, name str
 		}
 		return false, nil
 	})
-	if err != nil {
-		t.Fatalf("monitor ID not set for %s/%s: %v", namespace, name, err)
-	}
+	assert.NoError(t, err, "monitor ID not set for %s/%s", namespace, name)
 	return id
 }
 
 func fetchRemoteMonitor(t *testing.T, ctx context.Context, client *betterstack.Client, id string) betterstack.Monitor {
 	t.Helper()
 	monitor, err := client.Monitors.Get(ctx, id)
-	if err != nil {
-		t.Fatalf("fetch remote monitor %s: %v", id, err)
-	}
+	assert.NoError(t, err, "fetch remote monitor %s", id)
 	return monitor
 }
 
@@ -443,9 +401,8 @@ func runCmd(t *testing.T, cmd *exec.Cmd) []byte {
 	stderr := &bytes.Buffer{}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("command %s failed: %v\nstdout: %s\nstderr: %s", strings.Join(cmd.Args, " "), err, stdout.String(), stderr.String())
-	}
+	err := cmd.Run()
+	assert.NoError(t, err, "command %s failed\nstdout: %s\nstderr: %s", strings.Join(cmd.Args, " "), stdout.String(), stderr.String())
 	return stdout.Bytes()
 }
 
@@ -474,7 +431,7 @@ func loadDotEnvIfPresent(t *testing.T, root string) {
 		if os.IsNotExist(err) {
 			return
 		}
-		t.Fatalf("open .env: %v", err)
+		assert.NoError(t, err, "open .env")
 	}
 	defer file.Close()
 
@@ -495,7 +452,5 @@ func loadDotEnvIfPresent(t *testing.T, root string) {
 			_ = os.Setenv(key, value)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("read .env: %v", err)
-	}
+	assert.NoError(t, scanner.Err(), "read .env")
 }

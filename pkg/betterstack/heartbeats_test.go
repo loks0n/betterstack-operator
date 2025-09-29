@@ -7,101 +7,69 @@ import (
 	"net/http"
 	"testing"
 
+	"loks0n/betterstack-operator/internal/testutil/assert"
 	"loks0n/betterstack-operator/internal/testutil/httpmock"
 )
 
 func TestHeartbeatServiceCreate(t *testing.T) {
 	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodPost {
-			t.Fatalf("unexpected method: %s", req.Method)
-		}
-		if req.URL.Path != "/heartbeats" {
-			t.Fatalf("unexpected path: %s", req.URL.Path)
-		}
+		assert.String(t, "method", req.Method, http.MethodPost)
+		assert.String(t, "path", req.URL.Path, "/heartbeats")
 
 		var payload map[string]any
-		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-			t.Fatalf("decode payload: %v", err)
-		}
-		if name := payload["name"]; name != "Example" {
-			t.Fatalf("expected name Example, got %v", name)
-		}
+		err := json.NewDecoder(req.Body).Decode(&payload)
+		assert.NoError(t, err, "decode payload")
+		name, ok := payload["name"].(string)
+		assert.Bool(t, "payload name type", ok, true)
+		assert.String(t, "name", name, "Example")
 
 		return httpmock.JSONResponse(http.StatusCreated, `{"data":{"id":"67890","type":"heartbeat","attributes":{"status":"pending"}}}`), nil
 	})})
 
 	name := "Example"
 	heartbeat, err := client.Heartbeats.Create(context.Background(), HeartbeatCreateRequest{Name: &name})
-	if err != nil {
-		t.Fatalf("CreateHeartbeat error: %v", err)
-	}
-	if heartbeat.ID != "67890" {
-		t.Fatalf("unexpected id: %s", heartbeat.ID)
-	}
-	if heartbeat.Attributes.Status != HeartbeatStatusPending {
-		t.Fatalf("unexpected attributes: %+v", heartbeat.Attributes)
-	}
+	assert.NoError(t, err, "CreateHeartbeat")
+	assert.String(t, "id", heartbeat.ID, "67890")
+	assert.Equal(t, "status", heartbeat.Attributes.Status, HeartbeatStatusPending)
 }
 
 func TestHeartbeatServiceUpdate(t *testing.T) {
 	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodPatch {
-			t.Fatalf("unexpected method: %s", req.Method)
-		}
-		if req.URL.EscapedPath() != "/heartbeats/abc%2F123" {
-			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
-		}
+		assert.String(t, "method", req.Method, http.MethodPatch)
+		assert.String(t, "path", req.URL.EscapedPath(), "/heartbeats/abc%2F123")
 
 		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
+		assert.NoError(t, err, "read body")
 		var payload map[string]any
-		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("decode payload: %v", err)
-		}
-		if name := payload["name"]; name != "Updated" {
-			t.Fatalf("expected name Updated, got %v", name)
-		}
+		err = json.Unmarshal(body, &payload)
+		assert.NoError(t, err, "decode payload")
+		name, ok := payload["name"].(string)
+		assert.Bool(t, "payload name type", ok, true)
+		assert.String(t, "name", name, "Updated")
 
 		return httpmock.JSONResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"heartbeat","attributes":{"status":"down","name":"Updated"}}}`), nil
 	})})
 
 	name := "Updated"
 	heartbeat, err := client.Heartbeats.Update(context.Background(), "abc/123", HeartbeatUpdateRequest{Name: &name})
-	if err != nil {
-		t.Fatalf("UpdateHeartbeat error: %v", err)
-	}
-	if heartbeat.ID != "abc/123" {
-		t.Fatalf("unexpected id: %s", heartbeat.ID)
-	}
-	if heartbeat.Attributes.Status != HeartbeatStatusDown {
-		t.Fatalf("unexpected status: %s", heartbeat.Attributes.Status)
-	}
-	if heartbeat.Attributes.Name != "Updated" {
-		t.Fatalf("unexpected name: %s", heartbeat.Attributes.Name)
-	}
+	assert.NoError(t, err, "UpdateHeartbeat")
+	assert.String(t, "id", heartbeat.ID, "abc/123")
+	assert.Equal(t, "status", heartbeat.Attributes.Status, HeartbeatStatusDown)
+	assert.String(t, "name", heartbeat.Attributes.Name, "Updated")
 }
 
 func TestHeartbeatServiceDelete(t *testing.T) {
 	deleted := false
 	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodDelete {
-			t.Fatalf("unexpected method: %s", req.Method)
-		}
-		if req.URL.EscapedPath() != "/heartbeats/abc%2F123" {
-			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
-		}
+		assert.String(t, "method", req.Method, http.MethodDelete)
+		assert.String(t, "path", req.URL.EscapedPath(), "/heartbeats/abc%2F123")
 		deleted = true
 		return httpmock.JSONResponse(http.StatusNoContent, "{}"), nil
 	})})
 
-	if err := client.Heartbeats.Delete(context.Background(), "abc/123"); err != nil {
-		t.Fatalf("DeleteHeartbeat error: %v", err)
-	}
-	if !deleted {
-		t.Fatalf("expected delete to be called")
-	}
+	err := client.Heartbeats.Delete(context.Background(), "abc/123")
+	assert.NoError(t, err, "DeleteHeartbeat")
+	assert.Bool(t, "delete invoked", deleted, true)
 }
 
 func TestHeartbeatServiceDeleteNotFound(t *testing.T) {
@@ -109,29 +77,20 @@ func TestHeartbeatServiceDeleteNotFound(t *testing.T) {
 		return httpmock.JSONResponse(http.StatusNotFound, "{}"), nil
 	})})
 
-	if err := client.Heartbeats.Delete(context.Background(), "missing"); err != nil {
-		t.Fatalf("expected not found delete to be ignored, got %v", err)
-	}
+	err := client.Heartbeats.Delete(context.Background(), "missing")
+	assert.NoError(t, err, "DeleteHeartbeat missing")
 }
 
 func TestHeartbeatServiceGet(t *testing.T) {
 	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.EscapedPath() != "/heartbeats/abc%2F123" {
-			t.Fatalf("unexpected path: %s", req.URL.EscapedPath())
-		}
+		assert.String(t, "path", req.URL.EscapedPath(), "/heartbeats/abc%2F123")
 		return httpmock.JSONResponse(http.StatusOK, `{"data":{"id":"abc/123","type":"heartbeat","attributes":{"status":"up"}}}`), nil
 	})})
 
 	heartbeat, err := client.Heartbeats.Get(context.Background(), "abc/123")
-	if err != nil {
-		t.Fatalf("GetHeartbeat error: %v", err)
-	}
-	if heartbeat.ID != "abc/123" {
-		t.Fatalf("unexpected id: %s", heartbeat.ID)
-	}
-	if heartbeat.Attributes.Status != HeartbeatStatusUp {
-		t.Fatalf("unexpected attributes: %+v", heartbeat.Attributes)
-	}
+	assert.NoError(t, err, "GetHeartbeat")
+	assert.String(t, "id", heartbeat.ID, "abc/123")
+	assert.Equal(t, "status", heartbeat.Attributes.Status, HeartbeatStatusUp)
 }
 
 func TestHeartbeatServiceGetNotFound(t *testing.T) {
@@ -139,9 +98,7 @@ func TestHeartbeatServiceGetNotFound(t *testing.T) {
 		return httpmock.JSONResponse(http.StatusNotFound, `{"errors":"Resource with provided ID was not found"}`), nil
 	})})
 
-	if _, err := client.Heartbeats.Get(context.Background(), "missing"); err == nil {
-		t.Fatalf("expected error")
-	} else if !IsNotFound(err) {
-		t.Fatalf("expected not found, got %v", err)
-	}
+	_, err := client.Heartbeats.Get(context.Background(), "missing")
+	assert.Error(t, err, "expected missing heartbeat")
+	assert.Bool(t, "IsNotFound", IsNotFound(err), true)
 }

@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	monitoringv1alpha1 "loks0n/betterstack-operator/api/v1alpha1"
+	"loks0n/betterstack-operator/internal/testutil/assert"
 	"loks0n/betterstack-operator/internal/testutil/controllertest"
 	"loks0n/betterstack-operator/pkg/betterstack"
 )
@@ -124,20 +126,13 @@ func TestHeartbeatReconcileAddsFinalizer(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no explicit requeue, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
-	if err := client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated heartbeat: %v", err)
-	}
-	if !controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackHeartbeatFinalizer) {
-		t.Fatalf("expected finalizer to be present")
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated), "fetch updated heartbeat")
+	assert.Bool(t, "finalizer present", controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackHeartbeatFinalizer), true)
 }
 
 func TestHeartbeatReconcileHandlesMissingCredentials(t *testing.T) {
@@ -170,26 +165,20 @@ func TestHeartbeatReconcileHandlesMissingCredentials(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.RequeueAfter != requeueIntervalOnError {
-		t.Fatalf("expected requeue after %v, got %v", requeueIntervalOnError, res.RequeueAfter)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
-	if err := client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated heartbeat: %v", err)
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated), "fetch updated heartbeat")
 
 	creds := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionCredentials)
-	if creds == nil || creds.Status != metav1.ConditionFalse || creds.Reason != "TokenUnavailable" {
-		t.Fatalf("unexpected credentials condition: %+v", creds)
-	}
+	assert.NotNil(t, "credentials condition", creds)
+	assert.Equal(t, "credentials status", creds.Status, metav1.ConditionFalse)
+	assert.String(t, "credentials reason", creds.Reason, "TokenUnavailable")
 	ready := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
-	if ready == nil || ready.Status != metav1.ConditionFalse || ready.Reason != "TokenUnavailable" {
-		t.Fatalf("unexpected ready condition: %+v", ready)
-	}
+	assert.NotNil(t, "ready condition", ready)
+	assert.Equal(t, "ready status", ready.Status, metav1.ConditionFalse)
+	assert.String(t, "ready reason", ready.Reason, "TokenUnavailable")
 }
 
 func TestHeartbeatReconcileCreatesHeartbeatWhenRemoteMissing(t *testing.T) {
@@ -247,36 +236,25 @@ func TestHeartbeatReconcileCreatesHeartbeatWhenRemoteMissing(t *testing.T) {
 			return betterstack.Heartbeat{}, &betterstack.APIError{StatusCode: http.StatusNotFound}
 		},
 		createFn: func(ctx context.Context, req betterstack.HeartbeatCreateRequest) (betterstack.Heartbeat, error) {
-			if req.Name == nil || *req.Name != "Example" {
-				t.Fatalf("unexpected name: %+v", req.Name)
-			}
-			if req.TeamName == nil || *req.TeamName != "SRE" {
-				t.Fatalf("unexpected team name: %+v", req.TeamName)
-			}
-			if req.Period == nil || *req.Period != 60 {
-				t.Fatalf("unexpected period: %+v", req.Period)
-			}
-			if req.Grace == nil || *req.Grace != 30 {
-				t.Fatalf("unexpected grace: %+v", req.Grace)
-			}
-			if req.TeamWait == nil || *req.TeamWait != 120 {
-				t.Fatalf("unexpected team wait: %+v", req.TeamWait)
-			}
-			if req.PolicyID == nil || *req.PolicyID != "policy-1" {
-				t.Fatalf("unexpected policy id: %+v", req.PolicyID)
-			}
-			if req.HeartbeatGroupID == nil || *req.HeartbeatGroupID != 7 {
-				t.Fatalf("unexpected heartbeat group id: %+v", req.HeartbeatGroupID)
-			}
-			if req.SortIndex == nil || *req.SortIndex != 12 {
-				t.Fatalf("unexpected sort index: %+v", req.SortIndex)
-			}
-			if req.Paused == nil || *req.Paused != true {
-				t.Fatalf("expected paused true, got %+v", req.Paused)
-			}
-			if len(req.MaintenanceDays) != 2 {
-				t.Fatalf("unexpected maintenance days: %+v", req.MaintenanceDays)
-			}
+			assert.NotNil(t, "request name", req.Name)
+			assert.String(t, "request name", *req.Name, "Example")
+			assert.NotNil(t, "request team", req.TeamName)
+			assert.String(t, "request team", *req.TeamName, "SRE")
+			assert.NotNil(t, "request period", req.Period)
+			assert.Int(t, "request period", *req.Period, 60)
+			assert.NotNil(t, "request grace", req.Grace)
+			assert.Int(t, "request grace", *req.Grace, 30)
+			assert.NotNil(t, "request team wait", req.TeamWait)
+			assert.Int(t, "request team wait", *req.TeamWait, 120)
+			assert.NotNil(t, "request policy", req.PolicyID)
+			assert.String(t, "request policy", *req.PolicyID, "policy-1")
+			assert.NotNil(t, "request heartbeat group", req.HeartbeatGroupID)
+			assert.Int(t, "request heartbeat group", *req.HeartbeatGroupID, 7)
+			assert.NotNil(t, "request sort index", req.SortIndex)
+			assert.Int(t, "request sort index", *req.SortIndex, 12)
+			assert.NotNil(t, "request paused", req.Paused)
+			assert.Bool(t, "request paused", *req.Paused, true)
+			assert.Int(t, "request maintenance days len", len(req.MaintenanceDays), 2)
 			return betterstack.Heartbeat{ID: "new-id"}, nil
 		},
 	}
@@ -293,34 +271,20 @@ func TestHeartbeatReconcileCreatesHeartbeatWhenRemoteMissing(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
-	if err := client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated heartbeat: %v", err)
-	}
-
-	if updated.Status.HeartbeatID != "new-id" {
-		t.Fatalf("expected heartbeat id new-id, got %q", updated.Status.HeartbeatID)
-	}
-	if updated.Status.ObservedGeneration != heartbeat.Generation {
-		t.Fatalf("expected observed generation %d, got %d", heartbeat.Generation, updated.Status.ObservedGeneration)
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated), "fetch updated heartbeat")
+	assert.String(t, "heartbeat id", updated.Status.HeartbeatID, "new-id")
+	assert.Equal(t, "observed generation", updated.Status.ObservedGeneration, heartbeat.Generation)
 	ready := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
-	if ready == nil || ready.Status != metav1.ConditionTrue || ready.Reason != "HeartbeatSynced" {
-		t.Fatalf("unexpected ready condition: %+v", ready)
-	}
-	if factory.heartbeatCalls != 1 {
-		t.Fatalf("expected heartbeat factory to be invoked once, got %d", factory.heartbeatCalls)
-	}
-	if factory.lastHeartbeatToken != "abcd" {
-		t.Fatalf("expected token 'abcd', got %q", factory.lastHeartbeatToken)
-	}
+	assert.NotNil(t, "ready condition", ready)
+	assert.Equal(t, "ready status", ready.Status, metav1.ConditionTrue)
+	assert.String(t, "ready reason", ready.Reason, "HeartbeatSynced")
+	assert.Int(t, "heartbeat factory calls", factory.heartbeatCalls, 1)
+	assert.String(t, "last token", factory.lastHeartbeatToken, "abcd")
 }
 
 func TestHeartbeatReconcileHandlesUpdateError(t *testing.T) {
@@ -367,26 +331,20 @@ func TestHeartbeatReconcileHandlesUpdateError(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.RequeueAfter != requeueIntervalOnError {
-		t.Fatalf("expected requeue after error, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
-	if err := client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated heartbeat: %v", err)
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated), "fetch updated heartbeat")
 
 	syncCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionSync)
-	if syncCond == nil || syncCond.Status != metav1.ConditionFalse || syncCond.Reason != "SyncFailed" {
-		t.Fatalf("unexpected sync condition: %+v", syncCond)
-	}
+	assert.NotNil(t, "sync condition", syncCond)
+	assert.Equal(t, "sync status", syncCond.Status, metav1.ConditionFalse)
+	assert.String(t, "sync reason", syncCond.Reason, "SyncFailed")
 	readyCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
-	if readyCond == nil || readyCond.Status != metav1.ConditionFalse || readyCond.Reason != "SyncFailed" {
-		t.Fatalf("unexpected ready condition: %+v", readyCond)
-	}
+	assert.NotNil(t, "ready condition", readyCond)
+	assert.Equal(t, "ready status", readyCond.Status, metav1.ConditionFalse)
+	assert.String(t, "ready reason", readyCond.Reason, "SyncFailed")
 }
 
 func TestHeartbeatReconcileHandlesCreateError(t *testing.T) {
@@ -432,25 +390,17 @@ func TestHeartbeatReconcileHandlesCreateError(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.RequeueAfter != requeueIntervalOnError {
-		t.Fatalf("expected requeue after error, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
-	if err := client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated heartbeat: %v", err)
-	}
-	if updated.Status.HeartbeatID != "" {
-		t.Fatalf("heartbeat id should remain empty, got %q", updated.Status.HeartbeatID)
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated), "fetch updated heartbeat")
+	assert.String(t, "heartbeat id", updated.Status.HeartbeatID, "")
 
 	syncCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionSync)
-	if syncCond == nil || syncCond.Status != metav1.ConditionFalse || syncCond.Reason != "SyncFailed" {
-		t.Fatalf("unexpected sync condition: %+v", syncCond)
-	}
+	assert.NotNil(t, "sync condition", syncCond)
+	assert.Equal(t, "sync status", syncCond.Status, metav1.ConditionFalse)
+	assert.String(t, "sync reason", syncCond.Reason, "SyncFailed")
 }
 
 func TestHeartbeatReconcileHandlesDeletion(t *testing.T) {
@@ -483,9 +433,7 @@ func TestHeartbeatReconcileHandlesDeletion(t *testing.T) {
 	service := &fakeHeartbeatService{
 		deleteFn: func(ctx context.Context, id string) error {
 			deleted = true
-			if id != "remote-123" {
-				t.Fatalf("unexpected delete id %s", id)
-			}
+			assert.String(t, "delete id", id, "remote-123")
 			return nil
 		},
 	}
@@ -501,25 +449,18 @@ func TestHeartbeatReconcileHandlesDeletion(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue, got %#v", res)
-	}
-	if !deleted {
-		t.Fatalf("expected delete request to be issued")
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
+	assert.Bool(t, "delete issued", deleted, true)
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
 	err = client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated)
-	if err == nil {
-		if controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackHeartbeatFinalizer) {
-			t.Fatalf("expected finalizer to be removed")
-		}
-	} else if !apierrors.IsNotFound(err) {
-		t.Fatalf("failed to fetch updated heartbeat: %v", err)
+	if apierrors.IsNotFound(err) {
+		return
 	}
+	assert.NoError(t, err, "fetch updated heartbeat")
+	assert.Bool(t, "finalizer present", controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackHeartbeatFinalizer), false)
 }
 
 func TestHeartbeatReconcileHandlesDeletionMissingCredentials(t *testing.T) {
@@ -552,22 +493,17 @@ func TestHeartbeatReconcileHandlesDeletionMissingCredentials(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
 	err = client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated)
-	if err == nil {
-		if controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackHeartbeatFinalizer) {
-			t.Fatalf("expected finalizer to be removed")
-		}
-	} else if !apierrors.IsNotFound(err) {
-		t.Fatalf("failed to fetch updated heartbeat: %v", err)
+	if apierrors.IsNotFound(err) {
+		return
 	}
+	assert.NoError(t, err, "fetch updated heartbeat")
+	assert.Bool(t, "finalizer present", controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackHeartbeatFinalizer), false)
 }
 
 func TestHeartbeatReconcileHandlesDeletionRemoteNotFound(t *testing.T) {
@@ -613,22 +549,17 @@ func TestHeartbeatReconcileHandlesDeletionRemoteNotFound(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
 	err = client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated)
-	if err == nil {
-		if controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackHeartbeatFinalizer) {
-			t.Fatalf("expected finalizer to be removed")
-		}
-	} else if !apierrors.IsNotFound(err) {
-		t.Fatalf("failed to fetch updated heartbeat: %v", err)
+	if apierrors.IsNotFound(err) {
+		return
 	}
+	assert.NoError(t, err, "fetch updated heartbeat")
+	assert.Bool(t, "finalizer present", controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackHeartbeatFinalizer), false)
 }
 
 func TestHeartbeatReconcileReturnsErrorWhenStatusPatchFails(t *testing.T) {
@@ -676,15 +607,11 @@ func TestHeartbeatReconcileReturnsErrorWhenStatusPatchFails(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
-	if err == nil || err.Error() != "status patch failed" {
-		t.Fatalf("expected status patch error, got res=%#v err=%v", res, err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected zero result on error, got %#v", res)
-	}
-	if failingClient.Calls() != 2 {
-		t.Fatalf("expected two status patch attempts, got %d", failingClient.Calls())
-	}
+	assert.Error(t, err, "expected status patch failure")
+	assert.String(t, "error", err.Error(), "status patch failed")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
+	assert.Int(t, "status attempts", failingClient.Calls(), 2)
 }
 
 func TestBuildHeartbeatRequest(t *testing.T) {
@@ -716,14 +643,10 @@ func TestBuildHeartbeatRequest(t *testing.T) {
 	req := buildHeartbeatRequest(spec)
 
 	encoded, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
+	assert.NoError(t, err, "marshal request")
 
 	var got map[string]any
-	if err := json.Unmarshal(encoded, &got); err != nil {
-		t.Fatalf("unmarshal request: %v", err)
-	}
+	assert.NoError(t, json.Unmarshal(encoded, &got), "unmarshal request")
 
 	expected := map[string]any{
 		"team_name":            "SRE",
@@ -746,7 +669,6 @@ func TestBuildHeartbeatRequest(t *testing.T) {
 		"policy_id":            "policy-1",
 	}
 
-	if diff := diffMaps(got, expected); len(diff) > 0 {
-		t.Fatalf("unexpected request diff: %v", diff)
-	}
+	diff := diffMaps(got, expected)
+	assert.String(t, "diff", fmt.Sprint(diff), "map[]")
 }

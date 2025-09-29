@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	monitoringv1alpha1 "loks0n/betterstack-operator/api/v1alpha1"
+	"loks0n/betterstack-operator/internal/testutil/assert"
 	"loks0n/betterstack-operator/internal/testutil/controllertest"
 	"loks0n/betterstack-operator/pkg/betterstack"
 )
@@ -126,20 +127,13 @@ func TestReconcileAddsFinalizer(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no explicit requeue, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
-	if err := client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated monitor: %v", err)
-	}
-	if !controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackMonitorFinalizer) {
-		t.Fatalf("expected finalizer to be present")
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated), "fetch updated monitor")
+	assert.Bool(t, "finalizer present", controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackMonitorFinalizer), true)
 }
 
 func TestReconcileHandlesMissingCredentials(t *testing.T) {
@@ -173,26 +167,20 @@ func TestReconcileHandlesMissingCredentials(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.RequeueAfter != requeueIntervalOnError {
-		t.Fatalf("expected requeue after %v, got %v", requeueIntervalOnError, res.RequeueAfter)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
-	if err := client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated monitor: %v", err)
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated), "fetch updated monitor")
 
 	creds := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionCredentials)
-	if creds == nil || creds.Status != metav1.ConditionFalse || creds.Reason != "TokenUnavailable" {
-		t.Fatalf("unexpected credentials condition: %+v", creds)
-	}
+	assert.NotNil(t, "credentials condition", creds)
+	assert.Equal(t, "credentials status", creds.Status, metav1.ConditionFalse)
+	assert.String(t, "credentials reason", creds.Reason, "TokenUnavailable")
 	ready := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
-	if ready == nil || ready.Status != metav1.ConditionFalse || ready.Reason != "TokenUnavailable" {
-		t.Fatalf("unexpected ready condition: %+v", ready)
-	}
+	assert.NotNil(t, "ready condition", ready)
+	assert.Equal(t, "ready status", ready.Status, metav1.ConditionFalse)
+	assert.String(t, "ready reason", ready.Reason, "TokenUnavailable")
 }
 
 func TestReconcileCreatesMonitorWhenRemoteMissing(t *testing.T) {
@@ -234,27 +222,20 @@ func TestReconcileCreatesMonitorWhenRemoteMissing(t *testing.T) {
 	service := &fakeMonitorService{
 		t: t,
 		getFn: func(ctx context.Context, id string) (betterstack.Monitor, error) {
-			if id != "remote-123" {
-				t.Fatalf("unexpected get id %s", id)
-			}
+			assert.String(t, "get id", id, "remote-123")
 			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusNotFound}
 		},
 		updateFn: func(ctx context.Context, id string, req betterstack.MonitorUpdateRequest) (betterstack.Monitor, error) {
-			if id != "remote-123" {
-				t.Fatalf("unexpected update id %s", id)
-			}
+			assert.String(t, "update id", id, "remote-123")
 			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusNotFound}
 		},
 		createFn: func(ctx context.Context, req betterstack.MonitorCreateRequest) (betterstack.Monitor, error) {
-			if req.URL == nil || *req.URL != "https://example.com" {
-				t.Fatalf("unexpected create url %+v", req.URL)
-			}
-			if req.MonitorType == nil || *req.MonitorType != "status" {
-				t.Fatalf("unexpected monitor type %+v", req.MonitorType)
-			}
-			if req.HTTPMethod == nil || *req.HTTPMethod != "get" {
-				t.Fatalf("expected request method get, got %+v", req.HTTPMethod)
-			}
+			assert.NotNil(t, "request url", req.URL)
+			assert.String(t, "request url", *req.URL, "https://example.com")
+			assert.NotNil(t, "request type", req.MonitorType)
+			assert.String(t, "request type", *req.MonitorType, "status")
+			assert.NotNil(t, "request method", req.HTTPMethod)
+			assert.String(t, "request method", *req.HTTPMethod, "get")
 			return betterstack.Monitor{ID: "new-id"}, nil
 		},
 	}
@@ -268,34 +249,20 @@ func TestReconcileCreatesMonitorWhenRemoteMissing(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
-	if err := client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated monitor: %v", err)
-	}
-
-	if updated.Status.MonitorID != "new-id" {
-		t.Fatalf("expected monitor id to be new-id, got %q", updated.Status.MonitorID)
-	}
-	if updated.Status.ObservedGeneration != monitor.Generation {
-		t.Fatalf("expected observed generation %d, got %d", monitor.Generation, updated.Status.ObservedGeneration)
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated), "fetch updated monitor")
+	assert.String(t, "monitor id", updated.Status.MonitorID, "new-id")
+	assert.Equal(t, "observed generation", updated.Status.ObservedGeneration, monitor.Generation)
 	ready := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
-	if ready == nil || ready.Status != metav1.ConditionTrue || ready.Reason != "MonitorSynced" {
-		t.Fatalf("unexpected ready condition: %+v", ready)
-	}
-	if factory.monitorCalls != 1 {
-		t.Fatalf("expected monitor factory to be invoked once, got %d", factory.monitorCalls)
-	}
-	if factory.lastMonitorToken != "abcd" {
-		t.Fatalf("expected token 'abcd', got %q", factory.lastMonitorToken)
-	}
+	assert.NotNil(t, "ready condition", ready)
+	assert.Equal(t, "ready status", ready.Status, metav1.ConditionTrue)
+	assert.String(t, "ready reason", ready.Reason, "MonitorSynced")
+	assert.Int(t, "monitor factory calls", factory.monitorCalls, 1)
+	assert.String(t, "last token", factory.lastMonitorToken, "abcd")
 }
 
 func TestReconcileHandlesUpdateError(t *testing.T) {
@@ -336,9 +303,7 @@ func TestReconcileHandlesUpdateError(t *testing.T) {
 			return betterstack.Monitor{ID: id}, nil
 		},
 		updateFn: func(ctx context.Context, id string, req betterstack.MonitorUpdateRequest) (betterstack.Monitor, error) {
-			if id != "remote-123" {
-				t.Fatalf("unexpected update id %s", id)
-			}
+			assert.String(t, "update id", id, "remote-123")
 			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusInternalServerError, Message: "boom"}
 		},
 	}
@@ -348,29 +313,21 @@ func TestReconcileHandlesUpdateError(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.RequeueAfter != requeueIntervalOnError {
-		t.Fatalf("expected requeue after error, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
-	if err := client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated monitor: %v", err)
-	}
-	if updated.Status.MonitorID != "remote-123" {
-		t.Fatalf("monitor id should remain unchanged, got %q", updated.Status.MonitorID)
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated), "fetch updated monitor")
+	assert.String(t, "monitor id", updated.Status.MonitorID, "remote-123")
 
 	syncCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionSync)
-	if syncCond == nil || syncCond.Status != metav1.ConditionFalse || syncCond.Reason != "SyncFailed" {
-		t.Fatalf("unexpected sync condition: %+v", syncCond)
-	}
+	assert.NotNil(t, "sync condition", syncCond)
+	assert.Equal(t, "sync status", syncCond.Status, metav1.ConditionFalse)
+	assert.String(t, "sync reason", syncCond.Reason, "SyncFailed")
 	readyCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
-	if readyCond == nil || readyCond.Status != metav1.ConditionFalse || readyCond.Reason != "SyncFailed" {
-		t.Fatalf("unexpected ready condition: %+v", readyCond)
-	}
+	assert.NotNil(t, "ready condition", readyCond)
+	assert.Equal(t, "ready status", readyCond.Status, metav1.ConditionFalse)
+	assert.String(t, "ready reason", readyCond.Reason, "SyncFailed")
 }
 
 func TestReconcileHandlesCreateError(t *testing.T) {
@@ -416,25 +373,17 @@ func TestReconcileHandlesCreateError(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.RequeueAfter != requeueIntervalOnError {
-		t.Fatalf("expected requeue after error, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
-	if err := client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated); err != nil {
-		t.Fatalf("failed to fetch updated monitor: %v", err)
-	}
-	if updated.Status.MonitorID != "" {
-		t.Fatalf("monitor id should remain empty, got %q", updated.Status.MonitorID)
-	}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated), "fetch updated monitor")
+	assert.String(t, "monitor id", updated.Status.MonitorID, "")
 
 	syncCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionSync)
-	if syncCond == nil || syncCond.Status != metav1.ConditionFalse || syncCond.Reason != "SyncFailed" {
-		t.Fatalf("unexpected sync condition: %+v", syncCond)
-	}
+	assert.NotNil(t, "sync condition", syncCond)
+	assert.Equal(t, "sync status", syncCond.Status, metav1.ConditionFalse)
+	assert.String(t, "sync reason", syncCond.Reason, "SyncFailed")
 }
 
 func TestReconcileHandlesDeletion(t *testing.T) {
@@ -472,9 +421,7 @@ func TestReconcileHandlesDeletion(t *testing.T) {
 	service := &fakeMonitorService{
 		t: t,
 		deleteFn: func(ctx context.Context, id string) error {
-			if id != "remote-123" {
-				t.Fatalf("unexpected delete id %s", id)
-			}
+			assert.String(t, "delete id", id, "remote-123")
 			deleted = true
 			return nil
 		},
@@ -485,25 +432,18 @@ func TestReconcileHandlesDeletion(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue, got %#v", res)
-	}
-	if !deleted {
-		t.Fatalf("expected delete request to be issued")
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
+	assert.Bool(t, "delete issued", deleted, true)
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
 	err = client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated)
-	if err == nil {
-		if controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackMonitorFinalizer) {
-			t.Fatalf("expected finalizer to be removed")
-		}
-	} else if !apierrors.IsNotFound(err) {
-		t.Fatalf("failed to fetch updated monitor: %v", err)
+	if apierrors.IsNotFound(err) {
+		return
 	}
+	assert.NoError(t, err, "fetch updated monitor")
+	assert.Bool(t, "finalizer present", controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackMonitorFinalizer), false)
 }
 
 func TestReconcileHandlesDeletionMissingCredentials(t *testing.T) {
@@ -537,25 +477,19 @@ func TestReconcileHandlesDeletionMissingCredentials(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
 	err = client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated)
-	if err == nil {
-		if controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackMonitorFinalizer) {
-			t.Fatalf("expected finalizer to be removed")
-		}
-	} else if !apierrors.IsNotFound(err) {
-		t.Fatalf("failed to fetch updated monitor: %v", err)
+	if apierrors.IsNotFound(err) {
+		assert.Int(t, "monitor factory calls", factory.monitorCalls, 0)
+		return
 	}
-	if factory.monitorCalls != 0 {
-		t.Fatalf("expected monitor factory not to be called, got %d", factory.monitorCalls)
-	}
+	assert.NoError(t, err, "fetch updated monitor")
+	assert.Bool(t, "finalizer present", controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackMonitorFinalizer), false)
+	assert.Int(t, "monitor factory calls", factory.monitorCalls, 0)
 }
 
 func TestReconcileHandlesDeletionRemoteNotFound(t *testing.T) {
@@ -601,22 +535,17 @@ func TestReconcileHandlesDeletionRemoteNotFound(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err != nil {
-		t.Fatalf("reconcile returned error: %v", err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue, got %#v", res)
-	}
+	assert.NoError(t, err, "reconcile")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
 	err = client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated)
-	if err == nil {
-		if controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackMonitorFinalizer) {
-			t.Fatalf("expected finalizer to be removed")
-		}
-	} else if !apierrors.IsNotFound(err) {
-		t.Fatalf("failed to fetch updated monitor: %v", err)
+	if apierrors.IsNotFound(err) {
+		return
 	}
+	assert.NoError(t, err, "fetch updated monitor")
+	assert.Bool(t, "finalizer present", controllerutil.ContainsFinalizer(updated, monitoringv1alpha1.BetterStackMonitorFinalizer), false)
 }
 
 func TestFetchAPITokenValidation(t *testing.T) {
@@ -635,38 +564,26 @@ func TestFetchAPITokenValidation(t *testing.T) {
 	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme}
 	ctx := context.Background()
 
-	if _, err := r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{}); err == nil {
-		t.Fatalf("expected error when name is empty")
-	}
+	_, err := r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{})
+	assert.Error(t, err, "expected error when name empty")
 
-	if _, err := r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "missing"}, Key: "token"}); err == nil {
-		t.Fatalf("expected error for missing secret")
-	}
+	_, err = r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "missing"}, Key: "token"})
+	assert.Error(t, err, "expected error for missing secret")
 
-	if _, err := r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "missing"}); err == nil {
-		t.Fatalf("expected error for missing key")
-	}
+	_, err = r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "missing"})
+	assert.Error(t, err, "expected error for missing key")
 
 	emptySecret := secret.DeepCopy()
 	emptySecret.Data = map[string][]byte{"token": nil}
-	if err := client.Update(ctx, emptySecret); err != nil {
-		t.Fatalf("failed to update secret: %v", err)
-	}
-	if _, err := r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "token"}); err == nil {
-		t.Fatalf("expected error for empty token")
-	}
+	assert.NoError(t, client.Update(ctx, emptySecret), "update secret")
+	_, err = r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "token"})
+	assert.Error(t, err, "expected error for empty token")
 
 	// restore token to verify happy path
-	if err := client.Update(ctx, secret.DeepCopy()); err != nil {
-		t.Fatalf("failed to restore secret: %v", err)
-	}
+	assert.NoError(t, client.Update(ctx, secret.DeepCopy()), "restore secret")
 	token, err := r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "token"})
-	if err != nil {
-		t.Fatalf("unexpected error fetching token: %v", err)
-	}
-	if token != "abcd" {
-		t.Fatalf("expected token 'abcd', got %q", token)
-	}
+	assert.NoError(t, err, "fetch token")
+	assert.String(t, "token", token, "abcd")
 }
 
 func TestReconcileReturnsErrorWhenStatusPatchFails(t *testing.T) {
@@ -714,16 +631,11 @@ func TestReconcileReturnsErrorWhenStatusPatchFails(t *testing.T) {
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
-	if err == nil || err.Error() != "status patch failed" {
-		t.Fatalf("expected status patch error, got res=%#v err=%v", res, err)
-	}
-	if res.Requeue || res.RequeueAfter != 0 {
-		t.Fatalf("expected zero result on error, got %#v", res)
-	}
-
-	if failingClient.Calls() != 2 {
-		t.Fatalf("expected two status patch attempts, got %d", failingClient.Calls())
-	}
+	assert.Error(t, err, "expected status patch failure")
+	assert.String(t, "error", err.Error(), "status patch failed")
+	assert.Bool(t, "requeue", res.Requeue, false)
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
+	assert.Int(t, "status attempts", failingClient.Calls(), 2)
 }
 
 func TestBuildMonitorRequest(t *testing.T) {
@@ -818,26 +730,16 @@ func TestBuildMonitorRequest(t *testing.T) {
 		"custom":                "value",
 	}
 	wantedJSON, err := json.Marshal(want)
-	if err != nil {
-		t.Fatalf("marshal want: %v", err)
-	}
+	assert.NoError(t, err, "marshal want")
 	wanted := map[string]any{}
-	if err := json.Unmarshal(wantedJSON, &wanted); err != nil {
-		t.Fatalf("unmarshal want: %v", err)
-	}
+	assert.NoError(t, json.Unmarshal(wantedJSON, &wanted), "unmarshal want")
 
 	gotReq := buildMonitorRequest(spec, nil)
 	encoded, err := json.Marshal(gotReq)
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
+	assert.NoError(t, err, "marshal request")
 	got := map[string]any{}
-	if err := json.Unmarshal(encoded, &got); err != nil {
-		t.Fatalf("unmarshal request: %v", err)
-	}
-	if diff := diffMaps(got, wanted); len(diff) > 0 {
-		t.Fatalf("unexpected attributes map: diff=%v", diff)
-	}
+	assert.NoError(t, json.Unmarshal(encoded, &got), "unmarshal request")
+	assert.Int(t, "diff len", len(diffMaps(got, wanted)), 0)
 }
 
 func TestBuildMonitorRequestConvertsTimeoutForServerMonitors(t *testing.T) {
@@ -848,12 +750,8 @@ func TestBuildMonitorRequestConvertsTimeoutForServerMonitors(t *testing.T) {
 	}
 
 	req := buildMonitorRequest(spec, nil)
-	if req.RequestTimeout == nil {
-		t.Fatalf("request timeout missing")
-	}
-	if got, want := *req.RequestTimeout, 3000; got != want {
-		t.Fatalf("timeout not converted, got %d want %d", got, want)
-	}
+	assert.NotNil(t, "request timeout", req.RequestTimeout)
+	assert.Int(t, "timeout", *req.RequestTimeout, 3000)
 }
 
 func TestBuildMonitorRequestAssignsHeaderIDsWhenPresent(t *testing.T) {
@@ -877,12 +775,9 @@ func TestBuildMonitorRequestAssignsHeaderIDsWhenPresent(t *testing.T) {
 	}
 
 	req := buildMonitorRequest(spec, existing)
-	if len(req.RequestHeaders) != 1 {
-		t.Fatalf("expected 1 header, got %d", len(req.RequestHeaders))
-	}
-	if req.RequestHeaders[0].ID == nil || *req.RequestHeaders[0].ID != existingHeaderID {
-		t.Fatalf("expected header id %s, got %v", existingHeaderID, req.RequestHeaders[0].ID)
-	}
+	assert.Int(t, "headers len", len(req.RequestHeaders), 1)
+	assert.NotNil(t, "header id", req.RequestHeaders[0].ID)
+	assert.String(t, "header id value", *req.RequestHeaders[0].ID, existingHeaderID)
 }
 
 func diffMaps(got, want map[string]any) map[string][2]any {
