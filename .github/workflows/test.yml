@@ -81,7 +81,7 @@ jobs:
   helm-upgrade:
     name: Helm Upgrade
     runs-on: ubuntu-latest
-    needs: [helm-lint]
+    needs: [helm-lint, build-image]
 
     steps:
       - name: Checkout
@@ -98,12 +98,26 @@ jobs:
           version: v0.20.0
           cluster_name: betterstack-helm-upgrade
 
+      - name: Download built image
+        uses: actions/download-artifact@v4
+        with:
+          name: betterstack-operator-image
+          path: .
+
+      - name: Load image into Docker
+        run: docker load --input betterstack-operator-image.tar
+
+      - name: Load image into kind
+        run: kind load docker-image betterstack-operator:test --name betterstack-helm-upgrade
+
       - name: Helm upgrade --install
         run: |
           helm upgrade --install betterstack-operator ./helm/betterstack-operator \
             --namespace betterstack-operator --create-namespace \
             --set credentials.secret.create=true \
             --set credentials.secret.value=dummy-token \
+            --set image.repository=betterstack-operator \
+            --set image.tag=test \
             --wait --timeout 5m
 
   build-image:
@@ -117,6 +131,15 @@ jobs:
 
       - name: Build Docker image
         run: docker build --file Dockerfile --tag betterstack-operator:test .
+
+      - name: Save Docker image
+        run: docker save betterstack-operator:test -o betterstack-operator-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: betterstack-operator-image
+          path: betterstack-operator-image.tar
 
   e2e:
     name: End-to-End
