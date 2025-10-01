@@ -1,5 +1,7 @@
 # Better Stack Operator
 
+Define your Better Stack alerts in Kubernetes resources.
+
 The Better Stack Operator keeps Better Stack monitors and heartbeats in sync with Kubernetes by reconciling `BetterStackMonitor` and `BetterStackHeartbeat` custom resources into real Better Stack resources through the public API.
 
 ## Highlights
