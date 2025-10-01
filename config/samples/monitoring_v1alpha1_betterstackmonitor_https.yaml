@@ -12,7 +12,7 @@ spec:
   expectedStatusCodes:
     - 200
     - 204
-  requestMethod: HEAD
+  requestMethod: head
   followRedirects: true
   verifySSL: true
   rememberCookies: false

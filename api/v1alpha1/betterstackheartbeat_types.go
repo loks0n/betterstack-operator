@@ -13,12 +13,15 @@ const (
 // BetterStackHeartbeatSpec defines the desired state of a Better Stack heartbeat.
 type BetterStackHeartbeatSpec struct {
 	// Name is the human readable display name for the heartbeat.
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
 	// PeriodSeconds controls how often the monitored system must report in before Better Stack flags the heartbeat as missing.
+	// +kubebuilder:validation:Minimum=1
 	PeriodSeconds int `json:"periodSeconds"`
 
 	// GraceSeconds adds a tolerance window after the period expires before alerting.
+	// +kubebuilder:validation:Minimum=0
 	GraceSeconds int `json:"graceSeconds,omitempty"`
 
 	// TeamName assigns the heartbeat to a specific Better Stack team (needed when using a global token).
@@ -32,18 +35,22 @@ type BetterStackHeartbeatSpec struct {
 	CriticalAlert *bool `json:"criticalAlert,omitempty"`
 
 	// TeamWaitSeconds delays escalation to the next team.
+	// +kubebuilder:validation:Minimum=0
 	TeamWaitSeconds int `json:"teamWaitSeconds,omitempty"`
 
 	// HeartbeatGroupID associates the heartbeat with an existing group.
+	// +kubebuilder:validation:Minimum=0
 	HeartbeatGroupID *int `json:"heartbeatGroupID,omitempty"`
 
 	// SortIndex controls ordering inside Better Stack dashboards.
+	// +kubebuilder:validation:Minimum=0
 	SortIndex *int `json:"sortIndex,omitempty"`
 
 	// Paused marks the heartbeat as paused in Better Stack.
 	Paused *bool `json:"paused,omitempty"`
 
 	// Maintenance windows.
+	// +kubebuilder:validation:Items={type=string,enum={mon,tue,wed,thu,fri,sat,sun}}
 	MaintenanceDays     []string `json:"maintenanceDays,omitempty"`
 	MaintenanceFrom     string   `json:"maintenanceFrom,omitempty"`
 	MaintenanceTo       string   `json:"maintenanceTo,omitempty"`
@@ -53,9 +60,11 @@ type BetterStackHeartbeatSpec struct {
 	PolicyID *string `json:"policyID,omitempty"`
 
 	// Better Stack API base URL. Defaults to https://uptime.betterstack.com/api/v2 when omitted.
+	// +kubebuilder:validation:Format=uri
 	BaseURL string `json:"baseURL,omitempty"`
 
 	// APITokenSecretRef references the secret containing the Better Stack API token.
+	// +kubebuilder:validation:Required
 	APITokenSecretRef corev1.SecretKeySelector `json:"apiTokenSecretRef"`
 }
 

@@ -150,7 +150,7 @@ func runMonitorLifecycle(t *testing.T, k8sClient client.Client, apiClient *bette
 			MonitorType:               "status",
 			CheckFrequencyMinutes:     3,
 			ExpectedStatusCodes:       []int{200},
-			RequestMethod:             "HEAD",
+			RequestMethod:             "head",
 			FollowRedirects:           ptr.To(false),
 			RememberCookies:           ptr.To(false),
 			VerifySSL:                 ptr.To(true),
@@ -226,7 +226,7 @@ func runMonitorLifecycle(t *testing.T, k8sClient client.Client, apiClient *bette
 	monitor.Spec.Paused = true
 	monitor.Spec.CheckFrequencyMinutes = 5
 	monitor.Spec.ExpectedStatusCodes = []int{204, 205}
-	monitor.Spec.RequestMethod = "GET"
+	monitor.Spec.RequestMethod = "get"
 	monitor.Spec.FollowRedirects = ptr.To(true)
 	monitor.Spec.RememberCookies = ptr.To(true)
 	monitor.Spec.VerifySSL = ptr.To(false)

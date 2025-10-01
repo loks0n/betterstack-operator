@@ -19,10 +19,13 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // BetterStackClientFactory provides Better Stack API clients for reconcilers.
@@ -44,6 +47,8 @@ type BetterStackMonitorReconciler struct {
 	HTTPClient *http.Client
 	Clients    BetterStackMonitorClientFactory
 }
+
+const monitorSecretIndexKey = "monitoring.betterstack.io/monitor-secret"
 
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors/status,verbs=get;update;patch
@@ -341,8 +346,24 @@ func buildMonitorRequest(spec monitoringv1alpha1.BetterStackMonitorSpec, existin
 }
 
 func (r *BetterStackMonitorReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ctx := context.Background()
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &monitoringv1alpha1.BetterStackMonitor{}, monitorSecretIndexKey, func(obj client.Object) []string {
+		monitor, ok := obj.(*monitoringv1alpha1.BetterStackMonitor)
+		if !ok {
+			return nil
+		}
+		secretName := monitor.Spec.APITokenSecretRef.Name
+		if secretName == "" {
+			return nil
+		}
+		return []string{secretIndexValue(monitor.Namespace, secretName)}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&monitoringv1alpha1.BetterStackMonitor{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.requestsForSecret)).
 		Complete(r)
 }
 
@@ -356,4 +377,27 @@ func (r *BetterStackMonitorReconciler) monitorService(baseURL, token string) bet
 
 func (r *BetterStackMonitorReconciler) fetchAPIToken(ctx context.Context, namespace string, selector corev1.SecretKeySelector) (string, error) {
 	return credentials.FetchAPIToken(ctx, r.Client, namespace, selector)
+}
+
+func (r *BetterStackMonitorReconciler) requestsForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+	if secret.Namespace == "" || secret.Name == "" {
+		return nil
+	}
+
+	secretKey := secretIndexValue(secret.Namespace, secret.Name)
+	list := &monitoringv1alpha1.BetterStackMonitorList{}
+	if err := r.List(ctx, list, client.InNamespace(secret.Namespace), client.MatchingFields{monitorSecretIndexKey: secretKey}); err != nil {
+		log.FromContext(ctx).Error(err, "unable to list monitors for secret", "secret", secretKey)
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(list.Items))
+	for _, monitor := range list.Items {
+		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: monitor.Namespace, Name: monitor.Name}})
+	}
+	return requests
 }

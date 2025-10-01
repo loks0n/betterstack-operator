@@ -206,7 +206,7 @@ func TestReconcileCreatesMonitorWhenRemoteMissing(t *testing.T) {
 		Spec: monitoringv1alpha1.BetterStackMonitorSpec{
 			URL:           "https://example.com",
 			MonitorType:   "status",
-			RequestMethod: "GET",
+			RequestMethod: "get",
 			APITokenSecretRef: corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: "api"},
 				Key:                  "token",
@@ -656,7 +656,7 @@ func TestBuildMonitorRequest(t *testing.T) {
 		TeamName:                  "SRE",
 		CheckFrequencyMinutes:     3,
 		Regions:                   []string{"us", "eu"},
-		RequestMethod:             "POST",
+		RequestMethod:             "post",
 		ExpectedStatusCodes:       []int{201, 202},
 		RequiredKeyword:           "healthy",
 		Paused:                    true,

@@ -42,6 +42,7 @@ spec:
               properties:
                 name:
                   type: string
+                  minLength: 1
                 periodSeconds:
                   type: integer
                   minimum: 1
@@ -68,12 +69,21 @@ spec:
                   minimum: 0
                 sortIndex:
                   type: integer
+                  minimum: 0
                 paused:
                   type: boolean
                 maintenanceDays:
                   type: array
                   items:
                     type: string
+                    enum:
+                      - mon
+                      - tue
+                      - wed
+                      - thu
+                      - fri
+                      - sat
+                      - sun
                 maintenanceFrom:
                   type: string
                 maintenanceTo:
@@ -96,10 +106,10 @@ spec:
                   properties:
                     name:
                       type: string
+                      minLength: 1
                     key:
                       type: string
-                    optional:
-                      type: boolean
+                      minLength: 1
             status:
               type: object
               properties:

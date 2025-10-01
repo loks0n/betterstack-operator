@@ -14,13 +14,17 @@ import (
 	"loks0n/betterstack-operator/internal/controller/credentials"
 	"loks0n/betterstack-operator/pkg/betterstack"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // BetterStackHeartbeatClientFactory provides Better Stack API clients for reconcilers.
@@ -47,6 +51,8 @@ const (
 	// ReasonHeartbeatQuotaExceeded marks a reconciliation failure caused by Better Stack heartbeat quota limits.
 	ReasonHeartbeatQuotaExceeded = "HeartbeatQuotaExceeded"
 )
+
+const heartbeatSecretIndexKey = "monitoring.betterstack.io/heartbeat-secret"
 
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackheartbeats,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackheartbeats/status,verbs=get;update;patch
@@ -236,8 +242,24 @@ func buildHeartbeatRequest(spec monitoringv1alpha1.BetterStackHeartbeatSpec) bet
 }
 
 func (r *BetterStackHeartbeatReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ctx := context.Background()
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &monitoringv1alpha1.BetterStackHeartbeat{}, heartbeatSecretIndexKey, func(obj client.Object) []string {
+		heartbeat, ok := obj.(*monitoringv1alpha1.BetterStackHeartbeat)
+		if !ok {
+			return nil
+		}
+		secretName := heartbeat.Spec.APITokenSecretRef.Name
+		if secretName == "" {
+			return nil
+		}
+		return []string{secretIndexValue(heartbeat.Namespace, secretName)}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&monitoringv1alpha1.BetterStackHeartbeat{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.requestsForSecret)).
 		Complete(r)
 }
 
@@ -258,4 +280,27 @@ func isHeartbeatQuotaExceeded(err error) bool {
 		return false
 	}
 	return strings.Contains(strings.ToLower(apiErr.Message), "quota")
+}
+
+func (r *BetterStackHeartbeatReconciler) requestsForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+	if secret.Namespace == "" || secret.Name == "" {
+		return nil
+	}
+
+	secretKey := secretIndexValue(secret.Namespace, secret.Name)
+	list := &monitoringv1alpha1.BetterStackHeartbeatList{}
+	if err := r.List(ctx, list, client.InNamespace(secret.Namespace), client.MatchingFields{heartbeatSecretIndexKey: secretKey}); err != nil {
+		log.FromContext(ctx).Error(err, "unable to list heartbeats for secret", "secret", secretKey)
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(list.Items))
+	for _, heartbeat := range list.Items {
+		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: heartbeat.Namespace, Name: heartbeat.Name}})
+	}
+	return requests
 }

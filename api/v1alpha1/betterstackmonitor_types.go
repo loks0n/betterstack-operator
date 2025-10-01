@@ -17,12 +17,14 @@ const (
 // BetterStackMonitorSpec defines the desired state of a Better Stack monitor.
 type BetterStackMonitorSpec struct {
 	// URL is the endpoint Better Stack should monitor.
+	// +kubebuilder:validation:MinLength=1
 	URL string `json:"url"`
 
 	// Name is the human readable display name for the monitor.
 	Name string `json:"name,omitempty"`
 
 	// MonitorType controls the Better Stack monitor type (status, expected_status_code, keyword, keyword_absence, ping, tcp, udp, smtp, pop, imap, dns, playwright).
+	// +kubebuilder:validation:Enum=status;expected_status_code;keyword;keyword_absence;ping;tcp;udp;smtp;pop;imap;dns;playwright
 	MonitorType string `json:"monitorType,omitempty"`
 
 	// TeamName assigns the monitor to a specific Better Stack team (needed when using a global token).
@@ -30,18 +32,23 @@ type BetterStackMonitorSpec struct {
 
 	// CheckFrequencyMinutes controls how often Better Stack checks the monitor.
 	// Accepted values depend on your plan; Better Stack currently allows 0.5–30 minute intervals.
+	// +kubebuilder:validation:Minimum=1
 	CheckFrequencyMinutes int `json:"checkFrequencyMinutes,omitempty"`
 
 	// Regions specifies the Better Stack regions to probe from.
 	Regions []string `json:"regions,omitempty"`
 
 	// RequestMethod overrides the HTTP method used during the check (for example GET or POST).
+	// +kubebuilder:validation:Enum=get;post;put;patch;delete;head;options;trace
 	RequestMethod string `json:"requestMethod,omitempty"`
 
 	// ExpectedStatusCode sets a single expected HTTP status code treated as success.
+	// +kubebuilder:validation:Minimum=100
+	// +kubebuilder:validation:Maximum=599
 	ExpectedStatusCode int `json:"expectedStatusCode,omitempty"`
 
 	// ExpectedStatusCodes allows specifying multiple acceptable HTTP status codes.
+	// +kubebuilder:validation:Items={type=integer,minimum=100,maximum=599}
 	ExpectedStatusCodes []int `json:"expectedStatusCodes,omitempty"`
 
 	// RequiredKeyword must be present/absent depending on the monitor type.
@@ -60,24 +67,34 @@ type BetterStackMonitorSpec struct {
 	VerifySSL       *bool `json:"verifySSL,omitempty"`
 	RememberCookies *bool `json:"rememberCookies,omitempty"`
 
-	PolicyID             string `json:"policyID,omitempty"`
-	ExpirationPolicyID   string `json:"expirationPolicyID,omitempty"`
-	MonitorGroupID       string `json:"monitorGroupID,omitempty"`
-	TeamWaitSeconds      int    `json:"teamWaitSeconds,omitempty"`
-	DomainExpirationDays int    `json:"domainExpirationDays,omitempty"`
-	SSLExpirationDays    int    `json:"sslExpirationDays,omitempty"`
+	PolicyID           string `json:"policyID,omitempty"`
+	ExpirationPolicyID string `json:"expirationPolicyID,omitempty"`
+	MonitorGroupID     string `json:"monitorGroupID,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	TeamWaitSeconds int `json:"teamWaitSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	DomainExpirationDays int `json:"domainExpirationDays,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	SSLExpirationDays int `json:"sslExpirationDays,omitempty"`
 
 	// Port is kept as an integer for CRD ergonomics and converted to the
 	// string form expected by the Better Stack API (e.g. "443" or "25,465").
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	Port int `json:"port,omitempty"`
 	// RequestTimeoutSeconds is expressed in seconds for all monitor types. When
 	// Better Stack expects millisecond values (ping, tcp, udp, smtp, pop, imap,
 	// dns) the controller converts this value automatically.
-	RequestTimeoutSeconds     int    `json:"requestTimeoutSeconds,omitempty"`
-	RecoveryPeriodSeconds     int    `json:"recoveryPeriodSeconds,omitempty"`
-	ConfirmationPeriodSeconds int    `json:"confirmationPeriodSeconds,omitempty"`
-	IPVersion                 string `json:"ipVersion,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	RequestTimeoutSeconds int `json:"requestTimeoutSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	RecoveryPeriodSeconds int `json:"recoveryPeriodSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	ConfirmationPeriodSeconds int `json:"confirmationPeriodSeconds,omitempty"`
+	// +kubebuilder:validation:Enum=ipv4;ipv6
+	IPVersion string `json:"ipVersion,omitempty"`
 
+	// +kubebuilder:validation:Items={type=string,enum={mon,tue,wed,thu,fri,sat,sun}}
 	MaintenanceDays     []string `json:"maintenanceDays,omitempty"`
 	MaintenanceFrom     string   `json:"maintenanceFrom,omitempty"`
 	MaintenanceTo       string   `json:"maintenanceTo,omitempty"`
@@ -98,12 +115,15 @@ type BetterStackMonitorSpec struct {
 	BaseURL string `json:"baseURL,omitempty"`
 
 	// APITokenSecretRef references the secret containing the Better Stack API token.
+	// +kubebuilder:validation:Required
 	APITokenSecretRef corev1.SecretKeySelector `json:"apiTokenSecretRef"`
 }
 
 // BetterStackHeader represents an HTTP header definition for a monitor.
 type BetterStackHeader struct {
-	Name  string `json:"name"`
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// +kubebuilder:validation:MinLength=1
 	Value string `json:"value"`
 }
 

@@ -39,10 +39,24 @@ spec:
               properties:
                 url:
                   type: string
+                  minLength: 1
                 name:
                   type: string
                 monitorType:
                   type: string
+                  enum:
+                    - status
+                    - expected_status_code
+                    - keyword
+                    - keyword_absence
+                    - ping
+                    - tcp
+                    - udp
+                    - smtp
+                    - pop
+                    - imap
+                    - dns
+                    - playwright
                 teamName:
                   type: string
                 checkFrequencyMinutes:
@@ -54,12 +68,26 @@ spec:
                     type: string
                 requestMethod:
                   type: string
+                  description: HTTP method used for the check
+                  enum:
+                    - get
+                    - post
+                    - put
+                    - patch
+                    - delete
+                    - head
+                    - options
+                    - trace
                 expectedStatusCode:
                   type: integer
+                  minimum: 100
+                  maximum: 599
                 expectedStatusCodes:
                   type: array
                   items:
                     type: integer
+                    minimum: 100
+                    maximum: 599
                 requiredKeyword:
                   type: string
                 paused:
@@ -97,7 +125,8 @@ spec:
                   minimum: 0
                 port:
                   type: integer
-                  minimum: 0
+                  minimum: 1
+                  maximum: 65535
                 requestTimeoutSeconds:
                   type: integer
                   minimum: 0
@@ -109,10 +138,21 @@ spec:
                   minimum: 0
                 ipVersion:
                   type: string
+                  enum:
+                    - ipv4
+                    - ipv6
                 maintenanceDays:
                   type: array
                   items:
                     type: string
+                    enum:
+                      - mon
+                      - tue
+                      - wed
+                      - thu
+                      - fri
+                      - sat
+                      - sun
                 maintenanceFrom:
                   type: string
                 maintenanceTo:
@@ -126,8 +166,10 @@ spec:
                     properties:
                       name:
                         type: string
+                        minLength: 1
                       value:
                         type: string
+                        minLength: 1
                     required:
                       - name
                       - value
@@ -151,6 +193,7 @@ spec:
                     type: string
                 baseURL:
                   type: string
+                  format: uri
                 apiTokenSecretRef:
                   type: object
                   default:
@@ -162,8 +205,10 @@ spec:
                   properties:
                     name:
                       type: string
+                      minLength: 1
                     key:
                       type: string
+                      minLength: 1
             status:
               type: object
               properties:
