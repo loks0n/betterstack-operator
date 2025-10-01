@@ -149,4 +149,4 @@ jobs:
             echo "BETTERSTACK_TOKEN secret not set; failing"
             exit 1
           fi
-          go test -tags=e2e ./test/e2e -run TestBetterStackMonitorLifecycle -timeout 20m
+          go test -tags=e2e ./test/e2e -run TestBetterStackOperatorLifecycle -timeout 20m

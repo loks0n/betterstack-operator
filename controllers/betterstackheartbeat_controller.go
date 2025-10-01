@@ -2,8 +2,10 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"k8s.io/utils/ptr"
 
@@ -40,6 +42,11 @@ type BetterStackHeartbeatReconciler struct {
 	HTTPClient *http.Client
 	Clients    BetterStackHeartbeatClientFactory
 }
+
+const (
+	// ReasonHeartbeatQuotaExceeded marks a reconciliation failure caused by Better Stack heartbeat quota limits.
+	ReasonHeartbeatQuotaExceeded = "HeartbeatQuotaExceeded"
+)
 
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackheartbeats,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackheartbeats/status,verbs=get;update;patch
@@ -104,10 +111,18 @@ func (r *BetterStackHeartbeatReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if err != nil {
 		logger.Error(err, "unable to reconcile Better Stack heartbeat")
+		syncReason := "SyncFailed"
+		syncMessage := err.Error()
+		readyMessage := "Heartbeat reconciliation failed"
+		if isHeartbeatQuotaExceeded(err) {
+			syncReason = ReasonHeartbeatQuotaExceeded
+			syncMessage = "Better Stack heartbeat quota reached"
+			readyMessage = "Better Stack heartbeat quota reached"
+		}
 		_ = r.patchStatus(ctx, heartbeat, func(status *monitoringv1alpha1.BetterStackHeartbeatStatus) {
 			now := metav1.Now()
-			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionSync, metav1.ConditionFalse, "SyncFailed", err.Error(), &now))
-			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionReady, metav1.ConditionFalse, "SyncFailed", "Heartbeat reconciliation failed", &now))
+			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionSync, metav1.ConditionFalse, syncReason, syncMessage, &now))
+			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionReady, metav1.ConditionFalse, syncReason, readyMessage, &now))
 		})
 		return ctrl.Result{RequeueAfter: requeueIntervalOnError}, nil
 	}
@@ -232,4 +247,15 @@ func (r *BetterStackHeartbeatReconciler) heartbeatService(baseURL, token string)
 		factory = defaultBetterStackHeartbeatClientFactory{}
 	}
 	return factory.Heartbeat(baseURL, token, r.HTTPClient)
+}
+
+func isHeartbeatQuotaExceeded(err error) bool {
+	var apiErr *betterstack.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	if apiErr.StatusCode != http.StatusForbidden {
+		return false
+	}
+	return strings.Contains(strings.ToLower(apiErr.Message), "quota")
 }

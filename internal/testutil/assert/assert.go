@@ -130,6 +130,12 @@ func StringSlice(t testing.TB, field string, actual, expected []string) {
 	EqualSlice[string](t, field, actual, expected)
 }
 
+// Failf unconditionally fails the test with the formatted message.
+func Failf(t testing.TB, format string, args ...any) {
+	t.Helper()
+	t.Fatalf(format, args...)
+}
+
 func isNil(v any) bool {
 	if v == nil {
 		return true

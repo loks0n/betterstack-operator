@@ -52,11 +52,13 @@ type fakeMonitorService struct {
 	updateFn func(ctx context.Context, id string, req betterstack.MonitorUpdateRequest) (betterstack.Monitor, error)
 	createFn func(ctx context.Context, req betterstack.MonitorCreateRequest) (betterstack.Monitor, error)
 	deleteFn func(ctx context.Context, id string) error
+	listFn   func(ctx context.Context) ([]betterstack.Monitor, error)
 
 	getCalls    int
 	updateCalls int
 	createCalls int
 	deleteCalls int
+	listCalls   int
 
 	lastUpdateReq betterstack.MonitorUpdateRequest
 	lastCreateReq betterstack.MonitorCreateRequest
@@ -94,6 +96,14 @@ func (s *fakeMonitorService) Delete(ctx context.Context, id string) error {
 		return s.deleteFn(ctx, id)
 	}
 	return nil
+}
+
+func (s *fakeMonitorService) List(ctx context.Context) ([]betterstack.Monitor, error) {
+	s.listCalls++
+	if s.listFn != nil {
+		return s.listFn(ctx)
+	}
+	return nil, nil
 }
 
 var _ betterstack.MonitorClient = (*fakeMonitorService)(nil)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -97,6 +98,13 @@ type heartbeatData struct {
 	Attributes HeartbeatAttributes `json:"attributes"`
 }
 
+type heartbeatListEnvelope struct {
+	Data  []heartbeatData `json:"data"`
+	Links struct {
+		Next string `json:"next"`
+	} `json:"links"`
+}
+
 // Create creates a heartbeat in Better Stack.
 func (s *HeartbeatService) Create(ctx context.Context, req HeartbeatCreateRequest) (Heartbeat, error) {
 	var respEnvelope heartbeatEnvelope
@@ -134,6 +142,36 @@ func (s *HeartbeatService) Delete(ctx context.Context, id string) error {
 		return nil
 	}
 	return err
+}
+
+// List returns the collection of heartbeats. Pagination is followed automatically.
+func (s *HeartbeatService) List(ctx context.Context) ([]Heartbeat, error) {
+	path := "/heartbeats"
+	var heartbeats []Heartbeat
+
+	for path != "" {
+		var envelope heartbeatListEnvelope
+		if err := s.client.do(ctx, http.MethodGet, path, nil, &envelope); err != nil {
+			return nil, err
+		}
+
+		for _, item := range envelope.Data {
+			heartbeats = append(heartbeats, Heartbeat{ID: item.ID, Attributes: item.Attributes})
+		}
+
+		next := strings.TrimSpace(envelope.Links.Next)
+		if next == "" {
+			break
+		}
+
+		// normalise next path relative to base URL when required
+		if strings.HasPrefix(next, s.client.baseURL) {
+			next = strings.TrimPrefix(next, s.client.baseURL)
+		}
+		path = next
+	}
+
+	return heartbeats, nil
 }
 
 var _ HeartbeatClient = (*HeartbeatService)(nil)

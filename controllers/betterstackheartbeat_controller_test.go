@@ -403,6 +403,66 @@ func TestHeartbeatReconcileHandlesCreateError(t *testing.T) {
 	assert.String(t, "sync reason", syncCond.Reason, "SyncFailed")
 }
 
+func TestHeartbeatReconcileHandlesQuotaExceeded(t *testing.T) {
+	scheme := controllertest.NewScheme(t)
+
+	heartbeat := &monitoringv1alpha1.BetterStackHeartbeat{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "example",
+			Namespace:  "default",
+			Generation: 4,
+			Finalizers: []string{monitoringv1alpha1.BetterStackHeartbeatFinalizer},
+		},
+		Spec: monitoringv1alpha1.BetterStackHeartbeatSpec{
+			Name:          "Example",
+			PeriodSeconds: 60,
+			BaseURL:       "https://api.test",
+			APITokenSecretRef: corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "api"},
+				Key:                  "token",
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Data:       map[string][]byte{"token": []byte("abcd")},
+	}
+
+	service := &fakeHeartbeatService{
+		createFn: func(ctx context.Context, req betterstack.HeartbeatCreateRequest) (betterstack.Heartbeat, error) {
+			return betterstack.Heartbeat{}, &betterstack.APIError{StatusCode: http.StatusForbidden, Message: "Heartbeat quota reached. Please upgrade your account."}
+		},
+	}
+	factory := &fakeBetterStackHeartbeatClientFactory{heartbeat: service}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(heartbeat).
+		WithObjects(heartbeat.DeepCopy(), secret.DeepCopy()).
+		Build()
+
+	r := &BetterStackHeartbeatReconciler{Client: client, Scheme: scheme, Clients: factory}
+
+	ctx := context.Background()
+	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
+
+	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}, updated), "fetch updated heartbeat")
+	syncCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionSync)
+	assert.NotNil(t, "sync condition", syncCond)
+	assert.Equal(t, "sync status", syncCond.Status, metav1.ConditionFalse)
+	assert.String(t, "sync reason", syncCond.Reason, ReasonHeartbeatQuotaExceeded)
+	assert.String(t, "sync message", syncCond.Message, "Better Stack heartbeat quota reached")
+	readyCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
+	assert.NotNil(t, "ready condition", readyCond)
+	assert.Equal(t, "ready status", readyCond.Status, metav1.ConditionFalse)
+	assert.String(t, "ready reason", readyCond.Reason, ReasonHeartbeatQuotaExceeded)
+	assert.String(t, "ready message", readyCond.Message, "Better Stack heartbeat quota reached")
+}
+
 func TestHeartbeatReconcileHandlesDeletion(t *testing.T) {
 	scheme := controllertest.NewScheme(t)
 

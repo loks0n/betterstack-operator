@@ -133,3 +133,26 @@ func TestMonitorServiceGetNotFound(t *testing.T) {
 	assert.Error(t, err, "expected missing monitor")
 	assert.Bool(t, "IsNotFound", IsNotFound(err), true)
 }
+
+func TestMonitorServiceList(t *testing.T) {
+	var calls int
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		switch req.URL.RequestURI() {
+		case "/monitors":
+			return httpmock.JSONResponse(http.StatusOK, `{"data":[{"id":"1","type":"monitor","attributes":{"pronounceable_name":"First","url":"https://first.example.com"}}],"links":{"next":"https://api.test/monitors?page=2"}}`), nil
+		case "/monitors?page=2":
+			return httpmock.JSONResponse(http.StatusOK, `{"data":[{"id":"2","type":"monitor","attributes":{"pronounceable_name":"Second","url":"https://second.example.com"}}],"links":{"next":""}}`), nil
+		default:
+			t.Fatalf("unexpected path: %s", req.URL.RequestURI())
+		}
+		return nil, nil
+	})})
+
+	monitors, err := client.Monitors.List(context.Background())
+	assert.NoError(t, err, "List monitors")
+	assert.Int(t, "call count", calls, 2)
+	assert.Int(t, "monitor count", len(monitors), 2)
+	assert.String(t, "first name", monitors[0].Attributes.PronounceableName, "First")
+	assert.String(t, "second url", monitors[1].Attributes.URL, "https://second.example.com")
+}

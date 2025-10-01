@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,7 @@ type MonitorClient interface {
 	Get(ctx context.Context, id string) (Monitor, error)
 	Update(ctx context.Context, id string, req MonitorUpdateRequest) (Monitor, error)
 	Delete(ctx context.Context, id string) error
+	List(ctx context.Context) ([]Monitor, error)
 }
 
 // MonitorService provides monitor-specific Better Stack operations.
@@ -183,6 +185,13 @@ type monitorData struct {
 	Attributes MonitorAttributes `json:"attributes"`
 }
 
+type monitorListEnvelope struct {
+	Data  []monitorData `json:"data"`
+	Links struct {
+		Next string `json:"next"`
+	} `json:"links"`
+}
+
 // Create creates a monitor in Better Stack.
 func (s *MonitorService) Create(ctx context.Context, req MonitorCreateRequest) (Monitor, error) {
 	var respEnvelope monitorEnvelope
@@ -220,6 +229,34 @@ func (s *MonitorService) Delete(ctx context.Context, id string) error {
 		return nil
 	}
 	return err
+}
+
+// List returns all monitors, following pagination automatically.
+func (s *MonitorService) List(ctx context.Context) ([]Monitor, error) {
+	path := "/monitors"
+	var monitors []Monitor
+
+	for path != "" {
+		var envelope monitorListEnvelope
+		if err := s.client.do(ctx, http.MethodGet, path, nil, &envelope); err != nil {
+			return nil, err
+		}
+
+		for _, item := range envelope.Data {
+			monitors = append(monitors, Monitor{ID: item.ID, Attributes: item.Attributes})
+		}
+
+		next := strings.TrimSpace(envelope.Links.Next)
+		if next == "" {
+			break
+		}
+		if strings.HasPrefix(next, s.client.baseURL) {
+			next = strings.TrimPrefix(next, s.client.baseURL)
+		}
+		path = next
+	}
+
+	return monitors, nil
 }
 
 var _ MonitorClient = (*MonitorService)(nil)
