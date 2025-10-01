@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -48,7 +49,10 @@ type BetterStackMonitorReconciler struct {
 	Clients    BetterStackMonitorClientFactory
 }
 
-const monitorSecretIndexKey = "monitoring.betterstack.io/monitor-secret"
+const (
+	monitorSecretIndexKey      = "monitoring.betterstack.io/monitor-secret"
+	ReasonMonitorQuotaExceeded = "MonitorQuotaExceeded"
+)
 
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=monitoring.betterstack.io,resources=betterstackmonitors/status,verbs=get;update;patch
@@ -123,10 +127,18 @@ func (r *BetterStackMonitorReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	if err != nil {
 		logger.Error(err, "unable to reconcile Better Stack monitor")
+		syncReason := "SyncFailed"
+		syncMessage := err.Error()
+		readyMessage := "Monitor reconciliation failed"
+		if isMonitorQuotaExceeded(err) {
+			syncReason = ReasonMonitorQuotaExceeded
+			syncMessage = "Better Stack monitor quota reached"
+			readyMessage = "Better Stack monitor quota reached"
+		}
 		_ = r.patchStatus(ctx, monitor, func(status *monitoringv1alpha1.BetterStackMonitorStatus) {
 			now := metav1.Now()
-			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionSync, metav1.ConditionFalse, "SyncFailed", err.Error(), &now))
-			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionReady, metav1.ConditionFalse, "SyncFailed", "Monitor reconciliation failed", &now))
+			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionSync, metav1.ConditionFalse, syncReason, syncMessage, &now))
+			status.SetCondition(conditions.New(monitoringv1alpha1.ConditionReady, metav1.ConditionFalse, syncReason, readyMessage, &now))
 		})
 		return ctrl.Result{RequeueAfter: requeueIntervalOnError}, nil
 	}
@@ -400,4 +412,15 @@ func (r *BetterStackMonitorReconciler) requestsForSecret(ctx context.Context, ob
 		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: monitor.Namespace, Name: monitor.Name}})
 	}
 	return requests
+}
+
+func isMonitorQuotaExceeded(err error) bool {
+	var apiErr *betterstack.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	if apiErr.StatusCode != http.StatusForbidden {
+		return false
+	}
+	return strings.Contains(strings.ToLower(apiErr.Message), "quota")
 }

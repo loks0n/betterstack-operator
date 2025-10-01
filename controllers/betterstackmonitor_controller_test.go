@@ -396,6 +396,136 @@ func TestReconcileHandlesCreateError(t *testing.T) {
 	assert.String(t, "sync reason", syncCond.Reason, "SyncFailed")
 }
 
+func TestReconcileHandlesQuotaExceeded(t *testing.T) {
+	scheme := controllertest.NewScheme(t)
+
+	monitor := &monitoringv1alpha1.BetterStackMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "example",
+			Namespace:  "default",
+			Generation: 4,
+			Finalizers: []string{monitoringv1alpha1.BetterStackMonitorFinalizer},
+		},
+		Spec: monitoringv1alpha1.BetterStackMonitorSpec{
+			URL:         "https://example.com",
+			MonitorType: "status",
+			APITokenSecretRef: corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "api"},
+				Key:                  "token",
+			},
+			BaseURL: "https://api.test",
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Data:       map[string][]byte{"token": []byte("abcd")},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(monitor).
+		WithObjects(monitor.DeepCopy(), secret.DeepCopy()).
+		Build()
+
+	service := &fakeMonitorService{
+		t: t,
+		createFn: func(ctx context.Context, req betterstack.MonitorCreateRequest) (betterstack.Monitor, error) {
+			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusForbidden, Message: "Monitor quota reached. Please upgrade."}
+		},
+	}
+	factory := &fakeBetterStackMonitorClientFactory{monitor: service}
+
+	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme, Clients: factory}
+
+	ctx := context.Background()
+	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
+
+	updated := &monitoringv1alpha1.BetterStackMonitor{}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated), "fetch updated monitor")
+
+	syncCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionSync)
+	assert.NotNil(t, "sync condition", syncCond)
+	assert.Equal(t, "sync status", syncCond.Status, metav1.ConditionFalse)
+	assert.String(t, "sync reason", syncCond.Reason, ReasonMonitorQuotaExceeded)
+	assert.String(t, "sync message", syncCond.Message, "Better Stack monitor quota reached")
+
+	readyCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
+	assert.NotNil(t, "ready condition", readyCond)
+	assert.Equal(t, "ready status", readyCond.Status, metav1.ConditionFalse)
+	assert.String(t, "ready reason", readyCond.Reason, ReasonMonitorQuotaExceeded)
+	assert.String(t, "ready message", readyCond.Message, "Better Stack monitor quota reached")
+}
+
+func TestReconcileHandlesUpdateQuotaExceeded(t *testing.T) {
+	scheme := controllertest.NewScheme(t)
+
+	monitor := &monitoringv1alpha1.BetterStackMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "example",
+			Namespace:  "default",
+			Generation: 5,
+			Finalizers: []string{monitoringv1alpha1.BetterStackMonitorFinalizer},
+		},
+		Spec: monitoringv1alpha1.BetterStackMonitorSpec{
+			URL:         "https://example.com",
+			MonitorType: "status",
+			APITokenSecretRef: corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "api"},
+				Key:                  "token",
+			},
+			BaseURL: "https://api.test",
+		},
+		Status: monitoringv1alpha1.BetterStackMonitorStatus{MonitorID: "remote-123"},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Data:       map[string][]byte{"token": []byte("abcd")},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(monitor).
+		WithObjects(monitor.DeepCopy(), secret.DeepCopy()).
+		Build()
+
+	service := &fakeMonitorService{
+		t: t,
+		getFn: func(ctx context.Context, id string) (betterstack.Monitor, error) {
+			return betterstack.Monitor{ID: id}, nil
+		},
+		updateFn: func(ctx context.Context, id string, req betterstack.MonitorUpdateRequest) (betterstack.Monitor, error) {
+			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusForbidden, Message: "Monitor quota exceeded"}
+		},
+	}
+	factory := &fakeBetterStackMonitorClientFactory{monitor: service}
+
+	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme, Clients: factory}
+
+	ctx := context.Background()
+	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
+	assert.NoError(t, err, "reconcile")
+	assert.Equal(t, "requeueAfter", res.RequeueAfter, requeueIntervalOnError)
+
+	updated := &monitoringv1alpha1.BetterStackMonitor{}
+	assert.NoError(t, client.Get(ctx, types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}, updated), "fetch updated monitor")
+
+	syncCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionSync)
+	assert.NotNil(t, "sync condition", syncCond)
+	assert.Equal(t, "sync status", syncCond.Status, metav1.ConditionFalse)
+	assert.String(t, "sync reason", syncCond.Reason, ReasonMonitorQuotaExceeded)
+	assert.String(t, "sync message", syncCond.Message, "Better Stack monitor quota reached")
+
+	readyCond := controllertest.FindCondition(updated.Status.Conditions, monitoringv1alpha1.ConditionReady)
+	assert.NotNil(t, "ready condition", readyCond)
+	assert.Equal(t, "ready status", readyCond.Status, metav1.ConditionFalse)
+	assert.String(t, "ready reason", readyCond.Reason, ReasonMonitorQuotaExceeded)
+	assert.String(t, "ready message", readyCond.Message, "Better Stack monitor quota reached")
+}
+
 func TestReconcileHandlesDeletion(t *testing.T) {
 	scheme := controllertest.NewScheme(t)
 
