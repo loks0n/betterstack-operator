@@ -1,3 +1,5 @@
 {{- if .Values.crds.install }}
-{{- (.Files.Get "files/crds/monitoring.betterstack.io_betterstackmonitors.yaml") -}}
+{{- (.Files.Get "files/crds/monitoring.betterstack.io_betterstackmonitors.yaml") }}
+---
+{{- (.Files.Get "files/crds/monitoring.betterstack.io_betterstackheartbeats.yaml") -}}
 {{- end }}
