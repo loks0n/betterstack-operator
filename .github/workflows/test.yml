@@ -78,6 +78,34 @@ jobs:
       - name: Helm lint
         run: helm lint helm/betterstack-operator
 
+  helm-upgrade:
+    name: Helm Upgrade
+    runs-on: ubuntu-latest
+    needs: [helm-lint]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.13.3
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.8.0
+        with:
+          version: v0.20.0
+          cluster_name: betterstack-helm-upgrade
+
+      - name: Helm upgrade --install
+        run: |
+          helm upgrade --install betterstack-operator ./helm/betterstack-operator \
+            --namespace betterstack-operator --create-namespace \
+            --set credentials.secret.create=true \
+            --set credentials.secret.value=dummy-token \
+            --wait --timeout 5m
+
   build-image:
     name: Build Image
     runs-on: ubuntu-latest
