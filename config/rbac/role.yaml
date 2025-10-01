@@ -7,6 +7,7 @@ rules:
       - monitoring.betterstack.io
     resources:
       - betterstackmonitors
+      - betterstackheartbeats
     verbs:
       - create
       - delete
@@ -19,6 +20,7 @@ rules:
       - monitoring.betterstack.io
     resources:
       - betterstackmonitors/status
+      - betterstackheartbeats/status
     verbs:
       - get
       - patch
@@ -27,6 +29,7 @@ rules:
       - monitoring.betterstack.io
     resources:
       - betterstackmonitors/finalizers
+      - betterstackheartbeats/finalizers
     verbs:
       - update
   - apiGroups:
@@ -37,3 +40,10 @@ rules:
       - get
       - list
       - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch

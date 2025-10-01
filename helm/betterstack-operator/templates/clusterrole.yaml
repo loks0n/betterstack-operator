@@ -11,22 +11,30 @@ rules:
       - monitoring.betterstack.io
     resources:
       - betterstackmonitors
+      - betterstackheartbeats
     verbs: ["create","delete","get","list","patch","update","watch"]
   - apiGroups:
       - monitoring.betterstack.io
     resources:
       - betterstackmonitors/status
+      - betterstackheartbeats/status
     verbs: ["get","patch","update"]
   - apiGroups:
       - monitoring.betterstack.io
     resources:
       - betterstackmonitors/finalizers
+      - betterstackheartbeats/finalizers
     verbs: ["update"]
   - apiGroups:
       - ""
     resources:
       - secrets
     verbs: ["get","list","watch"]
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs: ["create","patch"]
   - apiGroups:
       - coordination.k8s.io
     resources:
