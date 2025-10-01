@@ -6,10 +6,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const (
-	BetterStackHeartbeatFinalizer = "betterstack.monitoring.loks0n/heartbeat-finalizer"
-)
-
 // BetterStackHeartbeatSpec defines the desired state of a Better Stack heartbeat.
 type BetterStackHeartbeatSpec struct {
 	// Name is the human readable display name for the heartbeat.

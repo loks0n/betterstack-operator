@@ -6,14 +6,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const (
-	BetterStackMonitorFinalizer = "betterstack.monitoring.loks0n/finalizer"
-
-	ConditionReady       = "Ready"
-	ConditionCredentials = "CredentialsAvailable"
-	ConditionSync        = "Synced"
-)
-
 // BetterStackMonitorSpec defines the desired state of a Better Stack monitor.
 type BetterStackMonitorSpec struct {
 	// URL is the endpoint Better Stack should monitor.
