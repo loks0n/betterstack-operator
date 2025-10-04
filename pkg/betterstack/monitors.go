@@ -186,10 +186,13 @@ type monitorData struct {
 }
 
 type monitorListEnvelope struct {
-	Data  []monitorData `json:"data"`
-	Links struct {
-		Next string `json:"next"`
-	} `json:"links"`
+	Data       []monitorData `json:"data"`
+	Pagination struct {
+		First string `json:"first"`
+		Last  string `json:"last"`
+		Prev  string `json:"prev"`
+		Next  string `json:"next"`
+	} `json:"pagination"`
 }
 
 // Create creates a monitor in Better Stack.
@@ -246,7 +249,7 @@ func (s *MonitorService) List(ctx context.Context) ([]Monitor, error) {
 			monitors = append(monitors, Monitor{ID: item.ID, Attributes: item.Attributes})
 		}
 
-		next := strings.TrimSpace(envelope.Links.Next)
+		next := strings.TrimSpace(envelope.Pagination.Next)
 		if next == "" {
 			break
 		}

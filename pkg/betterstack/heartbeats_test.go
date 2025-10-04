@@ -102,3 +102,26 @@ func TestHeartbeatServiceGetNotFound(t *testing.T) {
 	assert.Error(t, err, "expected missing heartbeat")
 	assert.Bool(t, "IsNotFound", IsNotFound(err), true)
 }
+
+func TestHeartbeatServiceList(t *testing.T) {
+	var calls int
+	client := NewClient("https://api.test", "token", &http.Client{Transport: httpmock.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		switch req.URL.RequestURI() {
+		case "/heartbeats":
+			return httpmock.JSONResponse(http.StatusOK, `{"data":[{"id":"1","type":"heartbeat","attributes":{"name":"Daily"}}],"pagination":{"next":"https://api.test/heartbeats?page=2"}}`), nil
+		case "/heartbeats?page=2":
+			return httpmock.JSONResponse(http.StatusOK, `{"data":[{"id":"2","type":"heartbeat","attributes":{"name":"Weekly"}}],"pagination":{"next":""}}`), nil
+		default:
+			t.Fatalf("unexpected path: %s", req.URL.RequestURI())
+		}
+		return nil, nil
+	})})
+
+	heartbeats, err := client.Heartbeats.List(context.Background())
+	assert.NoError(t, err, "List heartbeats")
+	assert.Int(t, "call count", calls, 2)
+	assert.Int(t, "heartbeat count", len(heartbeats), 2)
+	assert.String(t, "first name", heartbeats[0].Attributes.Name, "Daily")
+	assert.String(t, "second name", heartbeats[1].Attributes.Name, "Weekly")
+}

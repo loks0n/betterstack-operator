@@ -140,9 +140,9 @@ func TestMonitorServiceList(t *testing.T) {
 		calls++
 		switch req.URL.RequestURI() {
 		case "/monitors":
-			return httpmock.JSONResponse(http.StatusOK, `{"data":[{"id":"1","type":"monitor","attributes":{"pronounceable_name":"First","url":"https://first.example.com"}}],"links":{"next":"https://api.test/monitors?page=2"}}`), nil
+			return httpmock.JSONResponse(http.StatusOK, `{"data":[{"id":"1","type":"monitor","attributes":{"pronounceable_name":"First","url":"https://first.example.com"}}],"pagination":{"next":"https://api.test/monitors?page=2"}}`), nil
 		case "/monitors?page=2":
-			return httpmock.JSONResponse(http.StatusOK, `{"data":[{"id":"2","type":"monitor","attributes":{"pronounceable_name":"Second","url":"https://second.example.com"}}],"links":{"next":""}}`), nil
+			return httpmock.JSONResponse(http.StatusOK, `{"data":[{"id":"2","type":"monitor","attributes":{"pronounceable_name":"Second","url":"https://second.example.com"}}],"pagination":{"next":""}}`), nil
 		default:
 			t.Fatalf("unexpected path: %s", req.URL.RequestURI())
 		}

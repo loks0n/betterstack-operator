@@ -99,10 +99,13 @@ type heartbeatData struct {
 }
 
 type heartbeatListEnvelope struct {
-	Data  []heartbeatData `json:"data"`
-	Links struct {
-		Next string `json:"next"`
-	} `json:"links"`
+	Data       []heartbeatData `json:"data"`
+	Pagination struct {
+		First string `json:"first"`
+		Last  string `json:"last"`
+		Prev  string `json:"prev"`
+		Next  string `json:"next"`
+	} `json:"pagination"`
 }
 
 // Create creates a heartbeat in Better Stack.
@@ -159,7 +162,7 @@ func (s *HeartbeatService) List(ctx context.Context) ([]Heartbeat, error) {
 			heartbeats = append(heartbeats, Heartbeat{ID: item.ID, Attributes: item.Attributes})
 		}
 
-		next := strings.TrimSpace(envelope.Links.Next)
+		next := strings.TrimSpace(envelope.Pagination.Next)
 		if next == "" {
 			break
 		}
