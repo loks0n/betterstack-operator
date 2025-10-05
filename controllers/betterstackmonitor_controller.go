@@ -387,10 +387,6 @@ func (r *BetterStackMonitorReconciler) monitorService(baseURL, token string) bet
 	return factory.Monitor(baseURL, token, r.HTTPClient)
 }
 
-func (r *BetterStackMonitorReconciler) fetchAPIToken(ctx context.Context, namespace string, selector corev1.SecretKeySelector) (string, error) {
-	return credentials.FetchAPIToken(ctx, r.Client, namespace, selector)
-}
-
 func (r *BetterStackMonitorReconciler) requestsForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
 	secret, ok := obj.(*corev1.Secret)
 	if !ok {

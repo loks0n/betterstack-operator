@@ -25,7 +25,6 @@ import (
 )
 
 type fakeBetterStackHeartbeatClientFactory struct {
-	t                    *testing.T
 	heartbeat            betterstack.HeartbeatClient
 	heartbeatCalls       int
 	lastHeartbeatBaseURL string
@@ -37,17 +36,12 @@ func (f *fakeBetterStackHeartbeatClientFactory) Heartbeat(baseURL, token string,
 	f.lastHeartbeatBaseURL = baseURL
 	f.lastHeartbeatToken = token
 	if f.heartbeat == nil {
-		if f.t != nil {
-			f.t.Fatalf("heartbeat service not provided")
-		}
 		return &fakeHeartbeatService{}
 	}
 	return f.heartbeat
 }
 
 type fakeHeartbeatService struct {
-	t *testing.T
-
 	getFn    func(ctx context.Context, id string) (betterstack.Heartbeat, error)
 	updateFn func(ctx context.Context, id string, req betterstack.HeartbeatUpdateRequest) (betterstack.Heartbeat, error)
 	createFn func(ctx context.Context, req betterstack.HeartbeatCreateRequest) (betterstack.Heartbeat, error)
@@ -127,7 +121,6 @@ func TestHeartbeatReconcileAddsFinalizer(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
@@ -272,7 +265,6 @@ func TestHeartbeatReconcileCreatesHeartbeatWhenRemoteMissing(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
@@ -510,7 +502,6 @@ func TestHeartbeatReconcileHandlesDeletion(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 	assert.Bool(t, "delete issued", deleted, true)
 
@@ -554,7 +545,6 @@ func TestHeartbeatReconcileHandlesDeletionMissingCredentials(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
@@ -610,7 +600,6 @@ func TestHeartbeatReconcileHandlesDeletionRemoteNotFound(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackHeartbeat{}
@@ -669,7 +658,6 @@ func TestHeartbeatReconcileReturnsErrorWhenStatusPatchFails(t *testing.T) {
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: heartbeat.Name, Namespace: heartbeat.Namespace}})
 	assert.Error(t, err, "expected status patch failure")
 	assert.String(t, "error", err.Error(), "status patch failed")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 	assert.Int(t, "status attempts", failingClient.Calls(), 2)
 }

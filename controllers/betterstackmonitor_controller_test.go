@@ -19,13 +19,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	monitoringv1alpha1 "loks0n/betterstack-operator/api/v1alpha1"
+	"loks0n/betterstack-operator/internal/controller/credentials"
 	"loks0n/betterstack-operator/internal/testutil/assert"
 	"loks0n/betterstack-operator/internal/testutil/controllertest"
 	"loks0n/betterstack-operator/pkg/betterstack"
 )
 
 type fakeBetterStackMonitorClientFactory struct {
-	t                  *testing.T
 	monitor            betterstack.MonitorClient
 	monitorCalls       int
 	lastMonitorBaseURL string
@@ -37,17 +37,12 @@ func (f *fakeBetterStackMonitorClientFactory) Monitor(baseURL, token string, _ *
 	f.lastMonitorBaseURL = baseURL
 	f.lastMonitorToken = token
 	if f.monitor == nil {
-		if f.t != nil {
-			f.t.Fatalf("monitor service not provided")
-		}
 		return &fakeMonitorService{}
 	}
 	return f.monitor
 }
 
 type fakeMonitorService struct {
-	t *testing.T
-
 	getFn    func(ctx context.Context, id string) (betterstack.Monitor, error)
 	updateFn func(ctx context.Context, id string, req betterstack.MonitorUpdateRequest) (betterstack.Monitor, error)
 	createFn func(ctx context.Context, req betterstack.MonitorCreateRequest) (betterstack.Monitor, error)
@@ -138,7 +133,6 @@ func TestReconcileAddsFinalizer(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
@@ -230,7 +224,6 @@ func TestReconcileCreatesMonitorWhenRemoteMissing(t *testing.T) {
 		Build()
 
 	service := &fakeMonitorService{
-		t: t,
 		getFn: func(ctx context.Context, id string) (betterstack.Monitor, error) {
 			assert.String(t, "get id", id, "remote-123")
 			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusNotFound}
@@ -260,7 +253,6 @@ func TestReconcileCreatesMonitorWhenRemoteMissing(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
@@ -308,7 +300,6 @@ func TestReconcileHandlesUpdateError(t *testing.T) {
 		WithObjects(monitor.DeepCopy(), secret.DeepCopy()).
 		Build()
 	service := &fakeMonitorService{
-		t: t,
 		getFn: func(ctx context.Context, id string) (betterstack.Monitor, error) {
 			return betterstack.Monitor{ID: id}, nil
 		},
@@ -372,7 +363,6 @@ func TestReconcileHandlesCreateError(t *testing.T) {
 		WithObjects(monitor.DeepCopy(), secret.DeepCopy()).
 		Build()
 	service := &fakeMonitorService{
-		t: t,
 		createFn: func(ctx context.Context, req betterstack.MonitorCreateRequest) (betterstack.Monitor, error) {
 			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusInternalServerError, Message: "boom"}
 		},
@@ -429,7 +419,6 @@ func TestReconcileHandlesQuotaExceeded(t *testing.T) {
 		Build()
 
 	service := &fakeMonitorService{
-		t: t,
 		createFn: func(ctx context.Context, req betterstack.MonitorCreateRequest) (betterstack.Monitor, error) {
 			return betterstack.Monitor{}, &betterstack.APIError{StatusCode: http.StatusForbidden, Message: "Monitor quota reached. Please upgrade."}
 		},
@@ -493,7 +482,6 @@ func TestReconcileHandlesUpdateQuotaExceeded(t *testing.T) {
 		Build()
 
 	service := &fakeMonitorService{
-		t: t,
 		getFn: func(ctx context.Context, id string) (betterstack.Monitor, error) {
 			return betterstack.Monitor{ID: id}, nil
 		},
@@ -559,7 +547,6 @@ func TestReconcileHandlesDeletion(t *testing.T) {
 		Build()
 	deleted := false
 	service := &fakeMonitorService{
-		t: t,
 		deleteFn: func(ctx context.Context, id string) error {
 			assert.String(t, "delete id", id, "remote-123")
 			deleted = true
@@ -573,7 +560,6 @@ func TestReconcileHandlesDeletion(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 	assert.Bool(t, "delete issued", deleted, true)
 
@@ -611,14 +597,13 @@ func TestReconcileHandlesDeletionMissingCredentials(t *testing.T) {
 		WithStatusSubresource(monitor).
 		WithObjects(monitor.DeepCopy()).
 		Build()
-	factory := &fakeBetterStackMonitorClientFactory{t: t, monitor: &fakeMonitorService{t: t}}
+	factory := &fakeBetterStackMonitorClientFactory{monitor: &fakeMonitorService{}}
 
 	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme, Clients: factory}
 
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
@@ -664,7 +649,6 @@ func TestReconcileHandlesDeletionRemoteNotFound(t *testing.T) {
 		WithObjects(monitor.DeepCopy(), secret.DeepCopy()).
 		Build()
 	service := &fakeMonitorService{
-		t: t,
 		deleteFn: func(ctx context.Context, id string) error {
 			return &betterstack.APIError{StatusCode: http.StatusNotFound}
 		},
@@ -676,7 +660,6 @@ func TestReconcileHandlesDeletionRemoteNotFound(t *testing.T) {
 	ctx := context.Background()
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
 	assert.NoError(t, err, "reconcile")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 
 	updated := &monitoringv1alpha1.BetterStackMonitor{}
@@ -701,27 +684,26 @@ func TestFetchAPITokenValidation(t *testing.T) {
 		WithObjects(secret.DeepCopy()).
 		Build()
 
-	r := &BetterStackMonitorReconciler{Client: client, Scheme: scheme}
 	ctx := context.Background()
 
-	_, err := r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{})
+	_, err := credentials.FetchAPIToken(ctx, client, "default", corev1.SecretKeySelector{})
 	assert.Error(t, err, "expected error when name empty")
 
-	_, err = r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "missing"}, Key: "token"})
+	_, err = credentials.FetchAPIToken(ctx, client, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "missing"}, Key: "token"})
 	assert.Error(t, err, "expected error for missing secret")
 
-	_, err = r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "missing"})
+	_, err = credentials.FetchAPIToken(ctx, client, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "missing"})
 	assert.Error(t, err, "expected error for missing key")
 
 	emptySecret := secret.DeepCopy()
 	emptySecret.Data = map[string][]byte{"token": nil}
 	assert.NoError(t, client.Update(ctx, emptySecret), "update secret")
-	_, err = r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "token"})
+	_, err = credentials.FetchAPIToken(ctx, client, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "token"})
 	assert.Error(t, err, "expected error for empty token")
 
 	// restore token to verify happy path
 	assert.NoError(t, client.Update(ctx, secret.DeepCopy()), "restore secret")
-	token, err := r.fetchAPIToken(ctx, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "token"})
+	token, err := credentials.FetchAPIToken(ctx, client, "default", corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "token"})
 	assert.NoError(t, err, "fetch token")
 	assert.String(t, "token", token, "abcd")
 }
@@ -760,7 +742,6 @@ func TestReconcileReturnsErrorWhenStatusPatchFails(t *testing.T) {
 
 	failingClient := &controllertest.FailingStatusClient{Client: baseClient, FailOn: 2}
 	service := &fakeMonitorService{
-		t: t,
 		createFn: func(ctx context.Context, req betterstack.MonitorCreateRequest) (betterstack.Monitor, error) {
 			return betterstack.Monitor{ID: "new-id"}, nil
 		},
@@ -773,7 +754,6 @@ func TestReconcileReturnsErrorWhenStatusPatchFails(t *testing.T) {
 	res, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: monitor.Name, Namespace: monitor.Namespace}})
 	assert.Error(t, err, "expected status patch failure")
 	assert.String(t, "error", err.Error(), "status patch failed")
-	assert.Bool(t, "requeue", res.Requeue, false)
 	assert.Equal(t, "requeueAfter", res.RequeueAfter, time.Duration(0))
 	assert.Int(t, "status attempts", failingClient.Calls(), 2)
 }

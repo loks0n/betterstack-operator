@@ -21,6 +21,7 @@ func EqualPtr[T comparable](t testing.TB, field string, ptr *T, expected T) {
 	t.Helper()
 	if ptr == nil {
 		t.Fatalf("%s is nil", field)
+		return
 	}
 	if *ptr != expected {
 		t.Fatalf("%s mismatch: got %v want %v", field, *ptr, expected)
