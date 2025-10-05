@@ -12,18 +12,21 @@ rules:
     resources:
       - betterstackmonitors
       - betterstackheartbeats
+      - betterstackmonitorgroups
     verbs: ["create","delete","get","list","patch","update","watch"]
   - apiGroups:
       - monitoring.betterstack.io
     resources:
       - betterstackmonitors/status
       - betterstackheartbeats/status
+      - betterstackmonitorgroups/status
     verbs: ["get","patch","update"]
   - apiGroups:
       - monitoring.betterstack.io
     resources:
       - betterstackmonitors/finalizers
       - betterstackheartbeats/finalizers
+      - betterstackmonitorgroups/finalizers
     verbs: ["update"]
   - apiGroups:
       - ""

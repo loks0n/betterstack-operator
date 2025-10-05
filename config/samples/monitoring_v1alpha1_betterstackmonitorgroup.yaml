@@ -1,0 +1,13 @@
+apiVersion: monitoring.betterstack.io/v1alpha1
+kind: BetterStackMonitorGroup
+metadata:
+  name: example-monitor-group
+  namespace: default
+spec:
+  name: Example Monitor Group
+  teamName: platform
+  sortIndex: 10
+  paused: false
+  apiTokenSecretRef:
+    name: betterstack-operator-credentials
+    key: api-key

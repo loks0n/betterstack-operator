@@ -1,0 +1,103 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: betterstackmonitorgroups.monitoring.betterstack.io
+spec:
+  group: monitoring.betterstack.io
+  names:
+    kind: BetterStackMonitorGroup
+    listKind: BetterStackMonitorGroupList
+    plural: betterstackmonitorgroups
+    singular: betterstackmonitorgroup
+    shortNames:
+      - bsmg
+      - bsmgroup
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Name
+          type: string
+          jsonPath: .spec.name
+        - name: ID
+          type: string
+          jsonPath: .status.monitorGroupID
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - apiTokenSecretRef
+              properties:
+                name:
+                  type: string
+                teamName:
+                  type: string
+                sortIndex:
+                  type: integer
+                  minimum: 0
+                paused:
+                  type: boolean
+                baseURL:
+                  type: string
+                  format: uri
+                apiTokenSecretRef:
+                  type: object
+                  default:
+                    name: betterstack-operator-credentials
+                    key: api-key
+                  required:
+                    - name
+                    - key
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                    key:
+                      type: string
+                      minLength: 1
+            status:
+              type: object
+              properties:
+                monitorGroupID:
+                  type: string
+                observedGeneration:
+                  type: integer
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                      - reason
+                      - message
+                      - lastTransitionTime
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - "Unknown"
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                lastSyncedTime:
+                  type: string
+                  format: date-time
+      subresources:
+        status: {}

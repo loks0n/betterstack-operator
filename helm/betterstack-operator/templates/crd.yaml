@@ -2,4 +2,6 @@
 {{ .Files.Get "files/crds/monitoring.betterstack.io_betterstackmonitors.yaml" }}
 {{- printf "---\n" }}
 {{ .Files.Get "files/crds/monitoring.betterstack.io_betterstackheartbeats.yaml" }}
+{{- printf "---\n" }}
+{{ .Files.Get "files/crds/monitoring.betterstack.io_betterstackmonitorgroups.yaml" }}
 {{- end }}

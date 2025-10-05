@@ -77,6 +77,7 @@ func TestBetterStackOperatorLifecycle(t *testing.T) {
 
 	installCRD(t, cfg, filepath.Join(rootDir, "config", "crd", "bases", "monitoring.betterstack.io_betterstackmonitors.yaml"))
 	installCRD(t, cfg, filepath.Join(rootDir, "config", "crd", "bases", "monitoring.betterstack.io_betterstackheartbeats.yaml"))
+	installCRD(t, cfg, filepath.Join(rootDir, "config", "crd", "bases", "monitoring.betterstack.io_betterstackmonitorgroups.yaml"))
 
 	mgrCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -105,6 +106,13 @@ func TestBetterStackOperatorLifecycle(t *testing.T) {
 	}
 	assert.NoError(t, heartbeatReconciler.SetupWithManager(manager), "setup heartbeat reconciler")
 
+	monitorGroupReconciler := &controllers.BetterStackMonitorGroupReconciler{
+		Client:     manager.GetClient(),
+		Scheme:     manager.GetScheme(),
+		HTTPClient: httpClient,
+	}
+	assert.NoError(t, monitorGroupReconciler.SetupWithManager(manager), "setup monitor group reconciler")
+
 	go func() {
 		if err := manager.Start(mgrCtx); err != nil {
 			t.Errorf("manager stopped: %v", err)
@@ -130,6 +138,10 @@ func TestBetterStackOperatorLifecycle(t *testing.T) {
 
 	t.Run("heartbeat", func(t *testing.T) {
 		runHeartbeatLifecycle(t, k8sClient, apiClient, namespace, secretName, secretKey)
+	})
+
+	t.Run("monitorGroup", func(t *testing.T) {
+		runMonitorGroupLifecycle(t, k8sClient, apiClient, namespace, secretName, secretKey)
 	})
 }
 
@@ -302,6 +314,156 @@ func runMonitorLifecycle(t *testing.T, k8sClient client.Client, apiClient *bette
 	assert.Bool(t, "remote monitor exists", monitorExists(ctxDelete, apiClient, monitorID), false)
 }
 
+func runMonitorGroupLifecycle(t *testing.T, k8sClient client.Client, apiClient *betterstack.Client, namespace, secretName, secretKey string) {
+	t.Helper()
+
+	unique := time.Now().UnixNano()
+	resourceName := fmt.Sprintf("e2e-monitorgroup-%d", unique)
+	groupDisplayName := fmt.Sprintf("E2E Monitor Group %d", unique)
+	cleanupE2EMonitorGroups(t, apiClient, "E2E Monitor Group ")
+
+	group := &monitoringv1alpha1.BetterStackMonitorGroup{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: resourceName},
+		Spec: monitoringv1alpha1.BetterStackMonitorGroupSpec{
+			Name:      groupDisplayName,
+			SortIndex: ptr.To(50),
+			Paused:    ptr.To(false),
+			APITokenSecretRef: corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+				Key:                  secretKey,
+			},
+		},
+	}
+
+	assert.NoError(t, k8sClient.Create(context.Background(), group), "create monitor group")
+
+	assert.NoError(t, waitForMonitorGroupCondition(k8sClient, namespace, resourceName, func(obj *monitoringv1alpha1.BetterStackMonitorGroup) bool {
+		return metaConditionStatus(obj.Status.Conditions, monitoringv1alpha1.ConditionReady) == metav1.ConditionTrue
+	}), "wait for monitor group ready")
+
+	groupID, err := waitForMonitorGroupID(k8sClient, namespace, resourceName)
+	assert.NoError(t, err, "wait for monitor group id")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	remoteGroup := fetchRemoteMonitorGroup(t, ctx, apiClient, groupID)
+	attrs := remoteGroup.Attributes
+	assert.String(t, "name", attrs.Name, groupDisplayName)
+	assert.IntPtr(t, "sort index", attrs.SortIndex, 50)
+	assert.Bool(t, "paused", attrs.Paused, false)
+
+	monitorName := fmt.Sprintf("e2e-monitor-for-group-%d", unique)
+	monitorURL := fmt.Sprintf("https://example.com/healthz-group-%d", unique)
+	groupMonitor := &monitoringv1alpha1.BetterStackMonitor{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: monitorName},
+		Spec: monitoringv1alpha1.BetterStackMonitorSpec{
+			URL:                   monitorURL,
+			Name:                  fmt.Sprintf("Group Monitor %d", unique),
+			MonitorType:           "status",
+			CheckFrequencyMinutes: 3,
+			RequestMethod:         "head",
+			MonitorGroupID:        groupID,
+			APITokenSecretRef: corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+				Key:                  secretKey,
+			},
+		},
+	}
+
+	assert.NoError(t, k8sClient.Create(context.Background(), groupMonitor), "create monitor within group")
+	assert.NoError(t, waitForMonitorCondition(k8sClient, namespace, monitorName, func(obj *monitoringv1alpha1.BetterStackMonitor) bool {
+		return metaConditionStatus(obj.Status.Conditions, monitoringv1alpha1.ConditionReady) == metav1.ConditionTrue
+	}), "wait for grouped monitor ready")
+
+	monitorID, err := waitForMonitorID(k8sClient, namespace, monitorName)
+	assert.NoError(t, err, "wait for grouped monitor id")
+
+	ctxMonitor, cancelMonitor := context.WithTimeout(context.Background(), 60*time.Second)
+	remoteGroupedMonitor := fetchRemoteMonitor(t, ctxMonitor, apiClient, monitorID)
+	cancelMonitor()
+	assert.NotNil(t, "remote monitor group id", remoteGroupedMonitor.Attributes.MonitorGroupID)
+	assert.String(t, "remote monitor group id", *remoteGroupedMonitor.Attributes.MonitorGroupID, groupID)
+
+	assert.NoError(t, k8sClient.Get(context.Background(), client.ObjectKey{Name: resourceName, Namespace: namespace}, group), "get monitor group for update")
+	updatedName := fmt.Sprintf("%s Updated", groupDisplayName)
+	group.Spec.Name = updatedName
+	group.Spec.SortIndex = ptr.To(75)
+	group.Spec.Paused = ptr.To(true)
+	assert.NoError(t, k8sClient.Update(context.Background(), group), "update monitor group")
+
+	assert.NoError(t, waitForMonitorGroupCondition(k8sClient, namespace, resourceName, func(obj *monitoringv1alpha1.BetterStackMonitorGroup) bool {
+		return obj.Status.ObservedGeneration == obj.Generation
+	}), "wait for monitor group update")
+
+	err = wait.PollImmediate(2*time.Second, 2*time.Minute, func() (bool, error) {
+		ctxPoll, cancelPoll := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelPoll()
+		group, err := apiClient.MonitorGroups.Get(ctxPoll, groupID)
+		if err != nil {
+			return false, err
+		}
+		return group.Attributes.Paused, nil
+	})
+	assert.NoError(t, err, "wait for monitor group paused flag")
+
+	ctxUpdate, cancelUpdate := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancelUpdate()
+	updatedGroup := fetchRemoteMonitorGroup(t, ctxUpdate, apiClient, groupID)
+	uattrs := updatedGroup.Attributes
+	assert.String(t, "updated name", uattrs.Name, updatedName)
+	assert.IntPtr(t, "updated sort index", uattrs.SortIndex, 75)
+	assert.Bool(t, "updated paused", uattrs.Paused, true)
+
+	assert.NoError(t, k8sClient.Get(context.Background(), client.ObjectKey{Name: resourceName, Namespace: namespace}, group), "get monitor group to resume")
+	group.Spec.Paused = ptr.To(false)
+	assert.NoError(t, k8sClient.Update(context.Background(), group), "resume monitor group")
+	assert.NoError(t, waitForMonitorGroupCondition(k8sClient, namespace, resourceName, func(obj *monitoringv1alpha1.BetterStackMonitorGroup) bool {
+		return obj.Status.ObservedGeneration == obj.Generation
+	}), "wait for monitor group resume")
+
+	err = wait.PollImmediate(2*time.Second, 2*time.Minute, func() (bool, error) {
+		ctxPoll, cancelPoll := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelPoll()
+		group, err := apiClient.MonitorGroups.Get(ctxPoll, groupID)
+		if err != nil {
+			return false, err
+		}
+		return !group.Attributes.Paused, nil
+	})
+	assert.NoError(t, err, "wait for monitor group resumed flag")
+
+	assert.NoError(t, k8sClient.Delete(context.Background(), groupMonitor), "delete monitor within group")
+
+	err = wait.PollImmediate(2*time.Second, 90*time.Second, func() (bool, error) {
+		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: monitorName, Namespace: namespace}, groupMonitor)
+		if errors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	})
+	assert.NoError(t, err, "wait for grouped monitor deletion")
+
+	ctxMonitorDelete, cancelMonitorDelete := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancelMonitorDelete()
+	assert.Bool(t, "remote grouped monitor exists", monitorExists(ctxMonitorDelete, apiClient, monitorID), false)
+
+	assert.NoError(t, k8sClient.Delete(context.Background(), group), "delete monitor group")
+
+	err = wait.PollImmediate(2*time.Second, 90*time.Second, func() (bool, error) {
+		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: resourceName, Namespace: namespace}, group)
+		if errors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	})
+	assert.NoError(t, err, "wait for monitor group deletion")
+
+	ctxDelete, cancelDelete := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancelDelete()
+	assert.Bool(t, "remote monitor group exists", monitorGroupExists(ctxDelete, apiClient, groupID), false)
+}
+
 func runHeartbeatLifecycle(t *testing.T, k8sClient client.Client, apiClient *betterstack.Client, namespace, secretName, secretKey string) {
 	t.Helper()
 
@@ -423,6 +585,24 @@ func runHeartbeatLifecycle(t *testing.T, k8sClient client.Client, apiClient *bet
 	ctxDelete, cancelDelete := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancelDelete()
 	assert.Bool(t, "remote heartbeat exists", heartbeatExists(ctxDelete, apiClient, heartbeatID), false)
+}
+
+func cleanupE2EMonitorGroups(t *testing.T, apiClient *betterstack.Client, prefix string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	groups, err := apiClient.MonitorGroups.List(ctx)
+	assert.NoError(t, err, "list monitor groups")
+
+	for _, group := range groups {
+		if !strings.HasPrefix(group.Attributes.Name, prefix) {
+			continue
+		}
+		delCtx, delCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_ = apiClient.MonitorGroups.Delete(delCtx, group.ID)
+		delCancel()
+	}
 }
 
 func cleanupE2EHeartbeats(t *testing.T, apiClient *betterstack.Client, prefix string) {
@@ -554,6 +734,39 @@ func waitForMonitorID(k8sClient client.Client, namespace, name string) (string, 
 	return id, err
 }
 
+func waitForMonitorGroupCondition(k8sClient client.Client, namespace, name string, predicate func(*monitoringv1alpha1.BetterStackMonitorGroup) bool) error {
+	err := wait.PollImmediate(2*time.Second, 2*time.Minute, func() (bool, error) {
+		obj := &monitoringv1alpha1.BetterStackMonitorGroup{}
+		if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: name, Namespace: namespace}, obj); err != nil {
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		return predicate(obj), nil
+	})
+	return err
+}
+
+func waitForMonitorGroupID(k8sClient client.Client, namespace, name string) (string, error) {
+	var id string
+	err := wait.PollImmediate(2*time.Second, 2*time.Minute, func() (bool, error) {
+		obj := &monitoringv1alpha1.BetterStackMonitorGroup{}
+		if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: name, Namespace: namespace}, obj); err != nil {
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		if obj.Status.MonitorGroupID != "" {
+			id = obj.Status.MonitorGroupID
+			return true, nil
+		}
+		return false, nil
+	})
+	return id, err
+}
+
 func fetchRemoteMonitor(t *testing.T, ctx context.Context, client *betterstack.Client, id string) betterstack.Monitor {
 	t.Helper()
 	monitor, err := client.Monitors.Get(ctx, id)
@@ -561,8 +774,26 @@ func fetchRemoteMonitor(t *testing.T, ctx context.Context, client *betterstack.C
 	return monitor
 }
 
+func fetchRemoteMonitorGroup(t *testing.T, ctx context.Context, client *betterstack.Client, id string) betterstack.MonitorGroup {
+	t.Helper()
+	group, err := client.MonitorGroups.Get(ctx, id)
+	assert.NoError(t, err, "fetch remote monitor group %s", id)
+	return group
+}
+
 func monitorExists(ctx context.Context, client *betterstack.Client, id string) bool {
 	_, err := client.Monitors.Get(ctx, id)
+	if err == nil {
+		return true
+	}
+	if betterstack.IsNotFound(err) {
+		return false
+	}
+	return true
+}
+
+func monitorGroupExists(ctx context.Context, client *betterstack.Client, id string) bool {
+	_, err := client.MonitorGroups.Get(ctx, id)
 	if err == nil {
 		return true
 	}
