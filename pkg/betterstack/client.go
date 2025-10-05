@@ -20,9 +20,10 @@ type Client struct {
 	token      string
 	httpClient *http.Client
 
-	Monitors      *MonitorService
-	MonitorGroups *MonitorGroupService
-	Heartbeats    *HeartbeatService
+	Monitors        *MonitorService
+	MonitorGroups   *MonitorGroupService
+	Heartbeats      *HeartbeatService
+	HeartbeatGroups *HeartbeatGroupService
 }
 
 // APIError describes an error response from Better Stack.
@@ -55,6 +56,7 @@ func NewClient(baseURL, token string, httpClient *http.Client) *Client {
 	client.Monitors = &MonitorService{client: client}
 	client.MonitorGroups = &MonitorGroupService{client: client}
 	client.Heartbeats = &HeartbeatService{client: client}
+	client.HeartbeatGroups = &HeartbeatGroupService{client: client}
 	return client
 }
 

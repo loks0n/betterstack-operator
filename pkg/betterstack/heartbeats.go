@@ -15,6 +15,7 @@ type HeartbeatClient interface {
 	Get(ctx context.Context, id string) (Heartbeat, error)
 	Update(ctx context.Context, id string, req HeartbeatUpdateRequest) (Heartbeat, error)
 	Delete(ctx context.Context, id string) error
+	List(ctx context.Context) ([]Heartbeat, error)
 }
 
 // HeartbeatService provides heartbeat-specific Better Stack operations.
