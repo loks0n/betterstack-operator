@@ -58,7 +58,7 @@ body = '''{
 "url": "https://uptime.betterstack.com",
 "pronounceable_name": "Uptime homepage",
 "monitor_type": "keyword",
-"monitor_group_id": "12345",
+"monitor_group_id": 12345,
 "last_checked_at": "2020-09-01T14:17:46.000Z",
 "status": "up",
 "policy_id": null,
@@ -186,7 +186,7 @@ body = '''
 "url": "https://uptime.betterstack.com",
 "pronounceable_name": "Uptime homepage",
 "monitor_type": "keyword",
-"monitor_group_id": "12345",
+"monitor_group_id": 12345,
 "last_checked_at": "2020-09-01T14:17:46.000Z",
 "status": "up",
 "policy_id": null,
@@ -573,7 +573,7 @@ type = "array of strings"
 name = "monitor_group_id"
 description = "Set this attribute if you want to add this monitor to a monitor group."
 required = false
-type = "string"
+type = "integer"
 
 [[body_param]]
 name = "recovery_period"
@@ -705,7 +705,7 @@ body = '''{
 "url": "https://uptime.betterstack.com",
 "pronounceable_name": "Uptime homepage",
 "monitor_type": "keyword",
-"monitor_group_id": "12345",
+"monitor_group_id": 12345,
 "last_checked_at": "2020-09-01T14:17:46.000Z",
 "status": "up",
 "policy_id": null,
@@ -926,7 +926,7 @@ type = "array of strings"
 name = "monitor_group_id"
 description = "Set this attribute if you want to add this monitor to a monitor group."
 required = false
-type = "string"
+type = "integer"
 
 [[body_param]]
 name = "recovery_period"
@@ -1057,7 +1057,7 @@ body = '''{
 "url": "https://uptime.betterstack.com",
 "pronounceable_name": "Uptime homepage",
 "monitor_type": "keyword",
-"monitor_group_id": "12345",
+"monitor_group_id": 12345,
 "last_checked_at": "2020-09-01T14:17:46.000Z",
 "status": "up",
 "policy_id": null,

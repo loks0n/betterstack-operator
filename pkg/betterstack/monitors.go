@@ -33,13 +33,10 @@ type Monitor struct {
 
 // MonitorAttributes describe the configuration and runtime state of a monitor.
 type MonitorAttributes struct {
-	URL               string `json:"url"`
-	PronounceableName string `json:"pronounceable_name"`
-	MonitorType       string `json:"monitor_type"`
-	// MonitorGroupID is documented as a string, but the Better Stack API currently returns
-	// either a quoted string or a bare number depending on the endpoint.
-	// TODO(loks0n): drop the custom unmarshal once the API consistently emits strings.
-	MonitorGroupID       *string           `json:"-"`
+	URL                  string            `json:"url"`
+	PronounceableName    string            `json:"pronounceable_name"`
+	MonitorType          string            `json:"monitor_type"`
+	MonitorGroupID       *int              `json:"monitor_group_id"`
 	LastCheckedAt        *time.Time        `json:"last_checked_at"`
 	Status               MonitorStatus     `json:"status"`
 	PolicyID             *int              `json:"policy_id"`
@@ -78,70 +75,6 @@ type MonitorAttributes struct {
 	PlaywrightScript     string            `json:"playwright_script"`
 	EnvironmentVariables map[string]string `json:"environment_variables"`
 	IPVersion            *string           `json:"ip_version"`
-}
-
-type monitorAttributesAlias MonitorAttributes
-
-func (a *MonitorAttributes) UnmarshalJSON(data []byte) error {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-
-	var groupID *string
-	if v, ok := raw["monitor_group_id"]; ok {
-		id, err := parseMonitorGroupID(v)
-		if err != nil {
-			return err
-		}
-		groupID = id
-		delete(raw, "monitor_group_id")
-	}
-
-	processed, err := json.Marshal(raw)
-	if err != nil {
-		return err
-	}
-
-	var alias monitorAttributesAlias
-	if err := json.Unmarshal(processed, &alias); err != nil {
-		return err
-	}
-
-	*a = MonitorAttributes(alias)
-	a.MonitorGroupID = groupID
-	return nil
-}
-
-func parseMonitorGroupID(raw json.RawMessage) (*string, error) {
-	trimmed := strings.TrimSpace(string(raw))
-	if len(trimmed) == 0 || trimmed == "null" {
-		return nil, nil
-	}
-
-	if trimmed[0] == '"' {
-		var str string
-		if err := json.Unmarshal(raw, &str); err != nil {
-			return nil, err
-		}
-		if str == "" {
-			return nil, nil
-		}
-		return &str, nil
-	}
-
-	// Some monitor endpoints emit numeric IDs even though the docs specify strings,
-	// so accept numbers and normalise them to canonical string form.
-	// TODO(loks0n): tighten this once Better Stack fixes their API.
-	var num json.Number
-	if err := json.Unmarshal(raw, &num); err != nil {
-		return nil, err
-	}
-	str := num.String()
-	if str == "" {
-		return nil, nil
-	}
-	return &str, nil
 }
 
 // MonitorHeader represents headers returned by the API.

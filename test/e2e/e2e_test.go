@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	stdruntime "runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -382,8 +383,9 @@ func runMonitorGroupLifecycle(t *testing.T, k8sClient client.Client, apiClient *
 	ctxMonitor, cancelMonitor := context.WithTimeout(context.Background(), 60*time.Second)
 	remoteGroupedMonitor := fetchRemoteMonitor(t, ctxMonitor, apiClient, monitorID)
 	cancelMonitor()
-	assert.NotNil(t, "remote monitor group id", remoteGroupedMonitor.Attributes.MonitorGroupID)
-	assert.String(t, "remote monitor group id", *remoteGroupedMonitor.Attributes.MonitorGroupID, groupID)
+	gid, err := strconv.Atoi(groupID)
+	assert.NoError(t, err, "parse monitor group id to integer")
+	assert.IntPtr(t, "remote monitor group id", remoteGroupedMonitor.Attributes.MonitorGroupID, gid)
 
 	assert.NoError(t, k8sClient.Get(context.Background(), client.ObjectKey{Name: resourceName, Namespace: namespace}, group), "get monitor group for update")
 	updatedName := fmt.Sprintf("%s Updated", groupDisplayName)
