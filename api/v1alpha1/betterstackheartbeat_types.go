@@ -104,10 +104,10 @@ func (s *BetterStackHeartbeatStatus) SetCondition(cond metav1.Condition) {
 // BetterStackHeartbeat is the Schema for the betterstackheartbeats API.
 type BetterStackHeartbeat struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   BetterStackHeartbeatSpec   `json:"spec,omitempty"`
-	Status BetterStackHeartbeatStatus `json:"status,omitempty"`
+	Spec   BetterStackHeartbeatSpec   `json:"spec"`
+	Status BetterStackHeartbeatStatus `json:"status"`
 }
 
 // +kubebuilder:object:root=true
@@ -115,7 +115,7 @@ type BetterStackHeartbeat struct {
 // BetterStackHeartbeatList contains a list of BetterStackHeartbeat.
 type BetterStackHeartbeatList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata"`
 	Items           []BetterStackHeartbeat `json:"items"`
 }
 

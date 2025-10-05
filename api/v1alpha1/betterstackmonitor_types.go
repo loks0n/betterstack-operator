@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -140,15 +142,11 @@ func (in *BetterStackMonitorSpec) DeepCopyInto(out *BetterStackMonitorSpec) {
 	}
 	if in.AdditionalAttributes != nil {
 		out.AdditionalAttributes = make(map[string]string, len(in.AdditionalAttributes))
-		for key, val := range in.AdditionalAttributes {
-			out.AdditionalAttributes[key] = val
-		}
+		maps.Copy(out.AdditionalAttributes, in.AdditionalAttributes)
 	}
 	if in.EnvironmentVariables != nil {
 		out.EnvironmentVariables = make(map[string]string, len(in.EnvironmentVariables))
-		for key, val := range in.EnvironmentVariables {
-			out.EnvironmentVariables[key] = val
-		}
+		maps.Copy(out.EnvironmentVariables, in.EnvironmentVariables)
 	}
 }
 
@@ -211,10 +209,10 @@ func (in *BetterStackMonitorStatus) DeepCopy() *BetterStackMonitorStatus {
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=".status.conditions[?(@.type==\"Ready\")].status"
 type BetterStackMonitor struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   BetterStackMonitorSpec   `json:"spec,omitempty"`
-	Status BetterStackMonitorStatus `json:"status,omitempty"`
+	Spec   BetterStackMonitorSpec   `json:"spec"`
+	Status BetterStackMonitorStatus `json:"status"`
 }
 
 // DeepCopyInto copies the receiver into the provided out struct.
@@ -249,7 +247,7 @@ func (in *BetterStackMonitor) DeepCopyObject() runtime.Object {
 // BetterStackMonitorList contains a list of BetterStackMonitor.
 type BetterStackMonitorList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata"`
 	Items           []BetterStackMonitor `json:"items"`
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -163,9 +164,7 @@ func (r MonitorRequest) MarshalJSON() ([]byte, error) {
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return nil, err
 	}
-	for k, v := range r.AdditionalAttributes {
-		payload[k] = v
-	}
+	maps.Copy(payload, r.AdditionalAttributes)
 	return json.Marshal(payload)
 }
 
