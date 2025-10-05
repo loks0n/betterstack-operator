@@ -253,9 +253,7 @@ func (s *MonitorService) List(ctx context.Context) ([]Monitor, error) {
 		if next == "" {
 			break
 		}
-		if strings.HasPrefix(next, s.client.baseURL) {
-			next = strings.TrimPrefix(next, s.client.baseURL)
-		}
+		next, _ = strings.CutPrefix(next, s.client.baseURL)
 		path = next
 	}
 

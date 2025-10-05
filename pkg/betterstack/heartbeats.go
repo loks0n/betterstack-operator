@@ -168,9 +168,7 @@ func (s *HeartbeatService) List(ctx context.Context) ([]Heartbeat, error) {
 		}
 
 		// normalise next path relative to base URL when required
-		if strings.HasPrefix(next, s.client.baseURL) {
-			next = strings.TrimPrefix(next, s.client.baseURL)
-		}
+		next, _ = strings.CutPrefix(next, s.client.baseURL)
 		path = next
 	}
 
