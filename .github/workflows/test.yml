@@ -183,6 +183,8 @@ jobs:
 
   e2e:
     name: End-to-End
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     needs: [gofmt, go-vet, go-modernize, go-staticcheck, go-test, helm-lint]
     if: github.event_name != 'pull_request'
