@@ -46,11 +46,13 @@ type fakeHeartbeatService struct {
 	updateFn func(ctx context.Context, id string, req betterstack.HeartbeatUpdateRequest) (betterstack.Heartbeat, error)
 	createFn func(ctx context.Context, req betterstack.HeartbeatCreateRequest) (betterstack.Heartbeat, error)
 	deleteFn func(ctx context.Context, id string) error
+	listFn   func(ctx context.Context) ([]betterstack.Heartbeat, error)
 
 	getCalls    int
 	updateCalls int
 	createCalls int
 	deleteCalls int
+	listCalls   int
 
 	lastUpdateReq betterstack.HeartbeatUpdateRequest
 	lastCreateReq betterstack.HeartbeatCreateRequest
@@ -88,6 +90,14 @@ func (s *fakeHeartbeatService) Delete(ctx context.Context, id string) error {
 		return s.deleteFn(ctx, id)
 	}
 	return nil
+}
+
+func (s *fakeHeartbeatService) List(ctx context.Context) ([]betterstack.Heartbeat, error) {
+	s.listCalls++
+	if s.listFn != nil {
+		return s.listFn(ctx)
+	}
+	return nil, nil
 }
 
 var _ betterstack.HeartbeatClient = (*fakeHeartbeatService)(nil)
