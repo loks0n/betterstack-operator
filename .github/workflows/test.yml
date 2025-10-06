@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   gofmt:
     name: Go Format
@@ -123,6 +126,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [helm-lint, build-image]
 
+    permissions:
+      contents: read
+      actions: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.7
@@ -164,6 +171,10 @@ jobs:
     name: Build Image
     runs-on: ubuntu-latest
     needs: [gofmt, go-vet, go-modernize, go-staticcheck, go-test, helm-lint]
+
+    permissions:
+      contents: read
+      actions: write
 
     steps:
       - name: Checkout
